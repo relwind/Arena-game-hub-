@@ -43,7 +43,7 @@ export default function App() {
 
   const loadMe = useCallback(async (uid: string) => {
     const [pr, id, ro, pp] = await Promise.all([
-      sb.from('profiles').select('id,username,country,is_minor,bio').eq('id', uid).maybeSingle(),
+      sb.from('profiles').select('id,username,country,is_minor,bio,avatar_url').eq('id', uid).maybeSingle(),
       sb.from('player_identity').select('arena_id,efootball_name').eq('user_id', uid).maybeSingle(),
       sb.from('user_roles').select('role').eq('user_id', uid),
       sb.from('profile_private').select('onboarded').eq('user_id', uid).maybeSingle(),

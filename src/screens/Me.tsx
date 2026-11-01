@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { sb } from '../lib/supabase'
 import { useApp, useLoad, q, rpc, fmt, Top, Spin, ErrBox, errMsg } from '../lib/ui'
 import { OrganizerHome } from './Manage'
+import { AvatarPicker } from '../lib/img'
 
 export function Me() {
   const { me, nav, refreshMe, toast } = useApp()
@@ -29,7 +30,7 @@ export function Me() {
   return (
     <section className="screen">
       <div className="row" style={{ marginBottom: 16 }}>
-        <div className="tile" style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg,#2f7bff,#35d0ff)', fontSize: 24 }}>{(me.profile?.username || '?').slice(0, 1).toUpperCase()}</div>
+        <AvatarPicker name={me.profile?.username} url={me.profile?.avatar_url} size={64} />
         <div className="grow"><h2>{me.profile?.username}</h2><div className="small muted">{isOrg ? 'Organisateur' : 'Joueur Arena'}{me.roles.includes('admin') ? ' · Admin' : ''}</div></div>
       </div>
 

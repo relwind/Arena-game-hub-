@@ -142,11 +142,11 @@ export function GameArt({ size = 54 }: { size?: number }) {
   )
 }
 
-export function Av({ name, size = 40 }: { name?: string; size?: number }) {
+export function Av({ name, size = 40, url }: { name?: string; size?: number; url?: string | null }) {
   const h = Array.from(name || '?').reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)
   return (
-    <div className="tile" style={{ width: size, height: size, borderRadius: '50%', fontSize: size * 0.4, background: `linear-gradient(135deg,hsl(${h} 70% 55%),hsl(${(h + 40) % 360} 75% 45%))` }}>
-      {(name || '?').slice(0, 1).toUpperCase()}
+    <div className="tile" style={{ width: size, height: size, borderRadius: '50%', fontSize: size * 0.4, background: url ? `center/cover url(${url})` : `linear-gradient(135deg,hsl(${h} 70% 55%),hsl(${(h + 40) % 360} 75% 45%))` }}>
+      {url ? '' : (name || '?').slice(0, 1).toUpperCase()}
     </div>
   )
 }

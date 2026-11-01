@@ -13,7 +13,7 @@ function Card({ c, onOpen }: { c: any; onOpen: () => void }) {
   const full = c.status === 'open' && c.n >= c.max_players
   return (
     <button className="card stack" onClick={onOpen} style={{ minWidth: 190, maxWidth: 190, textAlign: 'left', flex: 'none', color: 'var(--text)' }}>
-      <div className="row"><GameArt size={40} /><div className="grow small muted">{c.status === 'open' ? inTxt(c.start_at) : STATUS[c.status][0]}</div></div>
+      <div className="row">{c.image_url ? <div style={{ width: 40, height: 40, borderRadius: 10, background: `center/cover url(${c.image_url})`, flex: 'none' }} /> : <GameArt size={40} />}<div className="grow small muted">{c.status === 'open' ? inTxt(c.start_at) : STATUS[c.status][0]}</div></div>
       <b style={{ fontSize: 14 }}>{c.name}</b>
       <div className="small muted">{full ? 'Complet' : `${c.n}/${c.max_players} inscrits`}</div>
     </button>
@@ -27,7 +27,7 @@ export function Home() {
     const [unread, mine, comps, mymatches, anyReg] = await Promise.all([
       sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', me.id).is('read_at', null),
       q<any[]>(sb.from('registrations').select('competition_id,status').eq('user_id', me.id).in('status', ['registered', 'waitlist'])),
-      q<any[]>(sb.from('competitions').select('id,name,start_at,max_players,format,status,registrations(count)').in('status', ['open', 'closed', 'ongoing']).order('start_at').limit(40)),
+      q<any[]>(sb.from('competitions').select('id,name,start_at,max_players,format,status,image_url,registrations(count)').in('status', ['open', 'closed', 'ongoing']).order('start_at').limit(40)),
       q<any[]>(sb.from('matches').select('id,competition_id,player_a,player_b,scheduled_at,round_index,phase').is('winner_id', null).eq('bye', false).not('player_a', 'is', null).not('player_b', 'is', null)
         .or(`player_a.eq.${me.id},player_b.eq.${me.id}`).order('scheduled_at').limit(3)),
       sb.from('registrations').select('competition_id', { count: 'exact', head: true }).eq('user_id', me.id),
@@ -55,7 +55,7 @@ export function Home() {
   return (
     <section className="screen">
       <div className="row" style={{ marginBottom: 16 }}>
-        <Av name={me.profile?.username} size={54} />
+        <Av name={me.profile?.username} size={54} url={me.profile?.avatar_url} />
         <div className="grow" style={{ minWidth: 0 }}>
           <h2 style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Bonjour, {me.profile?.username}</h2>
           <div className="small muted">Prêt à jouer ?</div>

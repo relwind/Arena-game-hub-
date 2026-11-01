@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { sb } from '../lib/supabase'
+import { AvatarPicker } from '../lib/img'
 import { Logo, Top, ErrBox, errMsg, useApp, age, rpc, Av } from '../lib/ui'
 
 export function Splash() {
@@ -214,7 +215,8 @@ export function OnbProfile() {
       <div className="top"><h2>Complète ton profil</h2></div>
       <Steps n={3} label="Ton profil joueur" />
       <form className="stack" onSubmit={submit} noValidate>
-        <div style={{ margin: '0 auto' }}><Av name={me.profile?.username} size={84} /></div>
+        <div style={{ margin: '0 auto' }}><AvatarPicker name={me.profile?.username} url={me.profile?.avatar_url} size={84} /></div>
+        <div className="small muted" style={{ textAlign: 'center', marginTop: -6 }}>Touche le rond pour choisir une photo (facultatif)</div>
         <div className="card stack">
           <b>Ton identifiant Arena</b>
           <div className="row"><b className="grow" style={{ fontFamily: 'var(--display)', fontSize: 20, letterSpacing: '.08em' }}>{me.ident?.arena_id}</b>

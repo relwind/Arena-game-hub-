@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { sb } from '../lib/supabase'
+import { CoverPicker } from '../lib/img'
 import { useApp, useLoad, q, rpc, fmt, hhmm, STATUS, FORMATS, PRESETS, Top, Spin, ErrBox, errMsg, namesOf, GameArt, Av } from '../lib/ui'
 
 const GROUPS: Record<string, string[]> = { avenir: ['open', 'closed'], encours: ['ongoing'], termine: ['finished', 'cancelled'] }
@@ -15,7 +16,7 @@ export function Comps() {
   const [search, setSearch] = useState('')
   const { data, loading, err } = useLoad(async () => {
     const [rows, mine] = await Promise.all([
-      q<any[]>(sb.from('competitions').select('id,name,status,start_at,max_players,format,organizer_id,prize,registrations(count)').in('status', GROUPS[tab]).order('start_at', { ascending: tab === 'avenir' }).limit(80)),
+      q<any[]>(sb.from('competitions').select('id,name,status,start_at,max_players,format,organizer_id,prize,image_url,registrations(count)').in('status', GROUPS[tab]).order('start_at', { ascending: tab === 'avenir' }).limit(80)),
       q<any[]>(sb.from('registrations').select('competition_id').eq('user_id', me.id).in('status', ['registered', 'waitlist', 'eliminated', 'done'])),
     ])
     const names = await namesOf(rows.map((r) => r.organizer_id))
@@ -64,7 +65,7 @@ export function Comps() {
           {!list.length && <div className="card small muted">{day >= 0 && showDays ? 'Aucune compétition ce jour-là. Choisis un autre jour.' : scope !== 'Toutes' ? "Tu n'es inscrit à aucune compétition ici. Passe sur « Toutes » pour t'inscrire." : 'Aucune compétition dans cette catégorie.'}</div>}
           {list.map((c: any) => (
             <button key={c.id} className="item" onClick={() => nav.go('cdetail', { id: c.id })}>
-              <GameArt size={54} />
+              {c.image_url ? <div style={{ width: 54, height: 54, borderRadius: 12, background: `center/cover url(${c.image_url})`, flex: 'none' }} /> : <GameArt size={54} />}
               <div className="grow"><b>{c.name}</b><div className="small muted">{fmt(c.start_at)} · {c.n}/{c.max_players} inscrits</div></div>
               <div style={{ textAlign: 'right' }}>
                 <div className={'badge ' + (c.status === 'cancelled' ? 'b-wait' : c.joined ? 'b-ok' : 'b-gold')}>{c.status === 'cancelled' ? 'Annulé' : c.joined ? 'Inscrit' : 'Gratuit'}</div>
@@ -144,13 +145,13 @@ const countdown = (d: string) => {
 }
 const ROUND_NAMES = (n: number, i: number) => (i === n - 1 ? 'Finale' : i === n - 2 ? 'Demi-finales' : i === n - 3 ? 'Quarts de finale' : `Tour ${i + 1}`)
 
-export function CompCover({ small }: { small?: boolean }) {
+export function CompCover({ small, img }: { small?: boolean; img?: string | null }) {
   return (
     <div style={{ height: small ? 90 : 120, borderRadius: 16, marginBottom: 10, position: 'relative', overflow: 'hidden', border: '1px solid var(--line)',
-      background: 'linear-gradient(#0a1233,#0d1a4a 55%,#0c4d2d 55%,#0f5a34)' }}>
-      <div style={{ position: 'absolute', left: 14, top: 14, width: 26, height: 26, borderRadius: '50%', background: '#fff', filter: 'blur(9px)', opacity: .8 }} />
+      background: img ? `center/cover url(${img})` : 'linear-gradient(#0a1233,#0d1a4a 55%,#0c4d2d 55%,#0f5a34)' }}>
+      {!img && <><div style={{ position: 'absolute', left: 14, top: 14, width: 26, height: 26, borderRadius: '50%', background: '#fff', filter: 'blur(9px)', opacity: .8 }} />
       <div style={{ position: 'absolute', right: 14, top: 14, width: 26, height: 26, borderRadius: '50%', background: '#fff', filter: 'blur(9px)', opacity: .8 }} />
-      <div className="row" style={{ position: 'absolute', left: 14, bottom: 12 }}><GameArt size={44} /><b style={{ fontFamily: 'var(--display)' }}>eFootball Mobile</b></div>
+      <div className="row" style={{ position: 'absolute', left: 14, bottom: 12 }}><GameArt size={44} /><b style={{ fontFamily: 'var(--display)' }}>eFootball Mobile</b></div></>}
     </div>
   )
 }
@@ -199,9 +200,9 @@ export function CompDetail({ id }: { id: string }) {
   return (
     <section className="screen">
       <Top title="Compétition" right={canManage && ['open', 'closed', 'ongoing'].includes(c.status) ? <button className="badge b-gold" style={{ border: 0 }} onClick={() => nav.go('cmanage', { id })}>Gérer</button> : undefined} />
-      <CompCover />
+      <CompCover img={c.image_url} />
       <div className="card row">
-        <GameArt size={54} />
+        {c.image_url ? <div style={{ width: 54, height: 54, borderRadius: 12, background: `center/cover url(${c.image_url})`, flex: 'none' }} /> : <GameArt size={54} />}
         <div className="grow">
           <h3>{c.name}</h3>
           <div className="small muted">{fmt(c.start_at)} · {nReg}/{c.max_players} inscrits</div>
@@ -324,7 +325,7 @@ export function CompCreate() {
   const { nav, toast, me } = useApp()
   const tomorrow = new Date(Date.now() + 86400e3)
   const [tpl, setTpl] = useState('free')
-  const [f, setF] = useState<any>({ name: '', rules: '', date: toLocalDate(tomorrow), time: '20:00', close: '', max: 16, gap: 45, format: 'elim', preset: 's', live: true, prize: '' })
+  const [f, setF] = useState<any>({ name: '', rules: '', date: toLocalDate(tomorrow), time: '20:00', close: '', max: 16, gap: 45, format: 'elim', preset: 's', live: true, prize: '', img: '' })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
@@ -349,7 +350,7 @@ export function CompCreate() {
     try {
       const row = await q<any>(sb.from('competitions').insert({
         game_id: 'efb', organizer_id: me.id, name: f.name.trim(), rules: f.rules.trim() || null, start_at: start.toISOString(),
-        registration_close_at: close, max_players: n, round_gap_minutes: gap, format: f.format, match_preset: f.preset, mandatory_live: f.live, prize: f.prize.trim() || null,
+        registration_close_at: close, max_players: n, round_gap_minutes: gap, format: f.format, match_preset: f.preset, mandatory_live: f.live, prize: f.prize.trim() || null, image_url: f.img || null,
       }).select('id').single())
       toast('Compétition publiée')
       nav.replace('cdetail', { id: row.id })
@@ -381,6 +382,7 @@ export function CompCreate() {
           <div className="small muted">Vérifie que ces réglages existent dans ta version de eFootball.</div>
           <div className="small muted">Après le tirage, Arena propose un horaire pour chaque tour, selon l'écart choisi plus haut.</div></div>
         <label className="f">Récompense du 1er (optionnelle)<input className="in" value={f.prize} onChange={set('prize')} placeholder="Ex. maillot, casque, bon d'achat" maxLength={80} /></label>
+        <CoverPicker value={f.img} onChange={(u) => setF((x: any) => ({ ...x, img: u }))} title={f.name} sub={f.prize ? 'Lot : ' + f.prize : f.date.split('-').reverse().join('/') + ' · ' + f.time} />
         <label className="f">Règlement<textarea className="in" value={f.rules} onChange={set('rules')} placeholder="Format, horaires, conditions de participation…" /></label>
         <label className="item"><span className="grow small">Diffusion obligatoire des demi-finales et de la finale</span><input type="checkbox" className="sw" checked={f.live} onChange={set('live')} /></label>
         <ErrBox text={err} />

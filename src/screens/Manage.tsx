@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { sb } from '../lib/supabase'
 import { useApp, useLoad, q, rpc, fmt, STATUS, PRESETS, Top, Spin, ErrBox, errMsg, namesOf, GameArt } from '../lib/ui'
 import { timeOptions, toLocalDate } from './Comps'
+import { CoverPicker } from '../lib/img'
 
 const ck = (r: any) => { if (r.error) throw new Error(errMsg(r.error)) }
 
@@ -123,13 +124,13 @@ export function CompManage({ id }: { id: string }) {
     if (!u.length) throw new Error('Joueur introuvable.')
     await rpc('invite_delegate', { _comp: id, _user: u[0].id }); setDg('')
   }, 'Invitation envoyée')
-  const startEdit = () => { const d = new Date(c.start_at); setRs({ name: c.name, date: toLocalDate(d), time: d.toTimeString().slice(0, 5).replace(/:(?!00|30)\d\d/, (m: string) => (Number(m.slice(1)) < 30 ? ':00' : ':30')), max: c.max_players, rules: c.rules || '', preset: c.match_preset, live: c.mandatory_live }) }
+  const startEdit = () => { const d = new Date(c.start_at); setRs({ name: c.name, date: toLocalDate(d), time: d.toTimeString().slice(0, 5).replace(/:(?!00|30)\d\d/, (m: string) => (Number(m.slice(1)) < 30 ? ':00' : ':30')), max: c.max_players, rules: c.rules || '', preset: c.match_preset, live: c.mandatory_live, img: c.image_url || '' }) }
   if (tab === 're' && !rs) startEdit()
   const save = () => act(async () => {
     const start = new Date(rs.date + 'T' + rs.time + ':00')
     if (rs.name.trim().length < 3) throw new Error('Nom trop court.')
     if (isNaN(start.getTime())) throw new Error('Date invalide.')
-    ck(await sb.from('competitions').update({ name: rs.name.trim(), start_at: start.toISOString(), max_players: Number(rs.max), rules: rs.rules.trim() || null, match_preset: rs.preset, mandatory_live: rs.live }).eq('id', id))
+    ck(await sb.from('competitions').update({ name: rs.name.trim(), start_at: start.toISOString(), max_players: Number(rs.max), rules: rs.rules.trim() || null, match_preset: rs.preset, mandatory_live: rs.live, image_url: rs.img || null }).eq('id', id))
   }, 'Modifications enregistrées')
 
   return (
@@ -264,6 +265,7 @@ export function CompManage({ id }: { id: string }) {
           <label className="f">Règlement<textarea className="in" value={rs.rules} onChange={(e) => setRs({ ...rs, rules: e.target.value })} placeholder="Format, horaires, conditions de participation…" /></label>
           <label className="f">Réglages des matchs<select className="in" value={rs.preset} onChange={(e) => setRs({ ...rs, preset: e.target.value })}>{Object.entries(PRESETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
           <label className="item"><span className="grow small">Diffusion obligatoire des demi-finales et de la finale</span><input type="checkbox" className="sw" checked={rs.live} onChange={(e) => setRs({ ...rs, live: e.target.checked })} /></label>
+          <CoverPicker value={rs.img} onChange={(u) => setRs((x: any) => ({ ...x, img: u }))} title={rs.name} sub={rs.date.split('-').reverse().join('/') + ' · ' + rs.time} />
           <button className="btn" disabled={busy} onClick={save}>Enregistrer les modifications</button>
         </div>
       )}
