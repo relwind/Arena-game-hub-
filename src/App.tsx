@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { App as CapApp } from '@capacitor/app'
 import { sb } from './lib/supabase'
 import { Ctx, Route, Spin, q } from './lib/ui'
-import { Splash, Login, Signup, Verify } from './screens/Auth'
+import { Splash, Login, Signup, Verify, OnbProfile, OnbPrefs, Valid } from './screens/Auth'
 import { Home } from './screens/Home'
 import { Comps, CompDetail, CompCreate, MyComps } from './screens/Comps'
 import { MatchRoom, MyMatches } from './screens/Match'
@@ -39,10 +39,11 @@ export default function App() {
   }, [])
 
   const loadMe = useCallback(async (uid: string) => {
-    const [pr, id, ro] = await Promise.all([
+    const [pr, id, ro, pp] = await Promise.all([
       sb.from('profiles').select('id,username,country,is_minor,bio').eq('id', uid).maybeSingle(),
       sb.from('player_identity').select('arena_id,efootball_name').eq('user_id', uid).maybeSingle(),
       sb.from('user_roles').select('role').eq('user_id', uid),
+      sb.from('profile_private').select('onboarded').eq('user_id', uid).maybeSingle(),
     ])
     const pending = localStorage.getItem('arena_country')
     if (pending && pr.data && !pr.data.country) {
@@ -55,6 +56,7 @@ export default function App() {
       profile: pr.data,
       ident: id.data,
       roles: (ro.data || []).map((r: any) => r.role),
+      onboarded: pp.data ? !!pp.data.onboarded : true,
     })
   }, [])
 
@@ -97,7 +99,7 @@ export default function App() {
   if (session === undefined) return <Spin />
 
   const cur = stack[stack.length - 1]
-  const showTabs = !!session && !!me && cur.name !== 'rplay'
+  const showTabs = !!session && !!me && me.onboarded && !['rplay', 'valid'].includes(cur.name)
   const section = TAB_NAMES.includes(cur.name) ? cur.name : SECTION[cur.name] || 'home'
   const ctx = { nav, me, toast, refreshMe: () => (session ? loadMe(session.user.id) : Promise.resolve()) }
 
@@ -107,8 +109,13 @@ export default function App() {
     view = cur.name === 'login' ? <Login /> : cur.name === 'signup' ? <Signup /> : cur.name === 'verify' ? <Verify p={cur.p} /> : <Splash />
   } else if (!me) {
     view = <Spin />
+  } else if (!me.onboarded && !['onb3', 'onb4', 'valid'].includes(cur.name)) {
+    view = <OnbProfile />
   } else {
     switch (cur.name) {
+      case 'onb3': view = <OnbProfile />; break
+      case 'onb4': view = <OnbPrefs />; break
+      case 'valid': view = <Valid />; break
       case 'home': view = <Home />; break
       case 'comps': view = <Comps />; break
       case 'cdetail': view = <CompDetail id={cur.p.id} />; break
