@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { sb } from '../lib/supabase'
-import { useApp, useLoad, q, rpc, fmt, hhmm, STATUS, FORMATS, PRESETS, Top, Spin, ErrBox, errMsg, namesOf, GameArt } from '../lib/ui'
+import { useApp, useLoad, q, rpc, fmt, hhmm, STATUS, FORMATS, PRESETS, Top, Spin, ErrBox, errMsg, namesOf, GameArt, Av } from '../lib/ui'
 
 const GROUPS: Record<string, string[]> = { avenir: ['open', 'closed'], encours: ['ongoing'], termine: ['finished', 'cancelled'] }
 
@@ -131,12 +131,35 @@ function Standings({ comp, group }: { comp: string; group: number | null }) {
   )
 }
 
+const PRESET_TXT: Record<string, string> = {
+  c: 'Match de 6 min, pas de prolongations, temps maximum 30 min.',
+  s: 'Match de 10 min, prolongations puis tirs au but, temps maximum 45 min.',
+  l: 'Match de 15 min, prolongations puis tirs au but, temps maximum 60 min.',
+}
+const countdown = (d: string) => {
+  const ms = new Date(d).getTime() - Date.now()
+  if (ms <= 0) return null
+  const m = Math.floor(ms / 60000), j = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60
+  return j ? `${j} j ${h} h` : h ? `${h} h ${mm} min` : `${mm} min`
+}
+const ROUND_NAMES = (n: number, i: number) => (i === n - 1 ? 'Finale' : i === n - 2 ? 'Demi-finales' : i === n - 3 ? 'Quarts de finale' : `Tour ${i + 1}`)
+
+export function CompCover({ small }: { small?: boolean }) {
+  return (
+    <div style={{ height: small ? 90 : 120, borderRadius: 16, marginBottom: 10, position: 'relative', overflow: 'hidden', border: '1px solid var(--line)',
+      background: 'linear-gradient(#0a1233,#0d1a4a 55%,#0c4d2d 55%,#0f5a34)' }}>
+      <div style={{ position: 'absolute', left: 14, top: 14, width: 26, height: 26, borderRadius: '50%', background: '#fff', filter: 'blur(9px)', opacity: .8 }} />
+      <div style={{ position: 'absolute', right: 14, top: 14, width: 26, height: 26, borderRadius: '50%', background: '#fff', filter: 'blur(9px)', opacity: .8 }} />
+      <div className="row" style={{ position: 'absolute', left: 14, bottom: 12 }}><GameArt size={44} /><b style={{ fontFamily: 'var(--display)' }}>eFootball Mobile</b></div>
+    </div>
+  )
+}
+
 export function CompDetail({ id }: { id: string }) {
   const { me, nav, toast } = useApp()
   const [tab, setTab] = useState('info')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
-  const [cancel, setCancel] = useState<string | null>(null)
   const { data, loading, reload } = useLoad(async () => {
     const [c, regs, ms, staff] = await Promise.all([
       q<any>(sb.from('competitions').select('*').eq('id', id).single()),
@@ -151,29 +174,39 @@ export function CompDetail({ id }: { id: string }) {
   if (loading && !data) return <section className="screen"><Top title="Compétition" /><Spin /></section>
   if (!data) return <section className="screen"><Top title="Compétition" /><div className="card">Compétition introuvable.</div></section>
   const { c, regs, ms, names } = data as any
-  const mine = regs.find((r: any) => r.user_id === me.id && ['registered', 'waitlist'].includes(r.status))
-  const active = regs.filter((r: any) => ['registered', 'waitlist'].includes(r.status) || ['eliminated', 'done'].includes(r.status))
+  const mine = regs.find((r: any) => r.user_id === me.id && ['registered', 'waitlist', 'eliminated', 'done'].includes(r.status))
+  const active = regs.filter((r: any) => ['registered', 'waitlist', 'eliminated', 'done'].includes(r.status))
   const nReg = regs.filter((r: any) => r.status === 'registered').length
   const isOrg = c.organizer_id === me.id || me.roles.includes('admin')
-  const myNext = ms.filter((m: any) => !m.winner_id && !m.bye && (m.player_a === me.id || m.player_b === me.id)).sort((a: any, b: any) => (a.scheduled_at || '').localeCompare(b.scheduled_at || ''))[0]
+  const canManage = isOrg || data.staff
+  const real = ms.filter((m: any) => !m.bye)
+  const played = real.filter((m: any) => m.winner_id).length
+  const myMs = real.filter((m: any) => m.player_a === me.id || m.player_b === me.id).sort((a: any, b: any) => (a.scheduled_at || '').localeCompare(b.scheduled_at || ''))
+  const myNext = myMs.find((m: any) => !m.winner_id && m.player_a && m.player_b)
+  const rounds = Math.max(0, ...ms.filter((m: any) => m.phase === 'elim' || m.phase === 'ko').map((m: any) => m.round_index + 1))
+  const curRound = ms.filter((m: any) => (m.phase === 'elim' || m.phase === 'ko') && !m.winner_id && !m.bye).map((m: any) => m.round_index).sort()[0]
   const act = async (fn: () => Promise<any>, ok: string) => {
     setBusy(true); setErr('')
     try { await fn(); toast(ok); await reload() } catch (e: any) { setErr(errMsg(e)) }
     setBusy(false)
   }
-  const checkinOpen = c.status === 'open' || c.status === 'closed' ? Date.now() > new Date(c.start_at).getTime() - 3600e3 : false
+  const checkinOpen = ['open', 'closed'].includes(c.status) && Date.now() > new Date(c.start_at).getTime() - 3600e3
   const groups = Array.from(new Set(ms.filter((m: any) => m.phase === 'groups').map((m: any) => m.group_index))).sort() as number[]
+  const cd = c.status === 'open' || c.status === 'closed' ? countdown(c.start_at) : null
+  const oppOf = (m: any) => names[m.player_a === me.id ? m.player_b : m.player_a] || 'adversaire à venir'
+  const roundLabel = (m: any) => (m.phase === 'groups' ? 'Poules' : m.phase === 'rr' ? 'Championnat' : ROUND_NAMES(rounds, m.round_index))
 
   return (
     <section className="screen">
-      <Top title="Compétition" />
+      <Top title="Compétition" right={canManage && ['open', 'closed', 'ongoing'].includes(c.status) ? <button className="badge b-gold" style={{ border: 0 }} onClick={() => nav.go('cmanage', { id })}>Gérer</button> : undefined} />
+      <CompCover />
       <div className="card row">
-        <div className="tile" style={{ background: 'linear-gradient(135deg,#1b3d9a,#35d0ff)' }}>EF</div>
+        <GameArt size={54} />
         <div className="grow">
           <h3>{c.name}</h3>
-          <div className="small muted">par {names[c.organizer_id] || 'Organisateur'} · {nReg}/{c.max_players} joueurs</div>
+          <div className="small muted">{fmt(c.start_at)} · {nReg}/{c.max_players} inscrits</div>
         </div>
-        <span className={'badge ' + STATUS[c.status][1]}>{STATUS[c.status][0]}</span>
+        {['finished', 'cancelled'].includes(c.status) && <span className={'badge ' + STATUS[c.status][1]}>{STATUS[c.status][0]}</span>}
       </div>
       {c.status === 'finished' && c.champion_id && (
         <div className="card mt" style={{ borderColor: 'var(--gold)', background: 'linear-gradient(135deg,#3a2a05,#14100a)' }}>
@@ -181,116 +214,144 @@ export function CompDetail({ id }: { id: string }) {
         </div>
       )}
       {c.status === 'cancelled' && <div className="card mt small">Annulée : {c.cancel_reason}</div>}
-      <div className="card small mt">Début : <b>{fmt(c.start_at)}</b></div>
-
-      {myNext && (
-        <button className="btn mt" onClick={() => nav.go('match', { id: myNext.id })}>Ouvrir mon match ({names[myNext.player_a === me.id ? myNext.player_b : myNext.player_a] || 'adversaire à venir'})</button>
-      )}
-
-      <div className="stack mt">
-        {c.status === 'open' && !mine && c.organizer_id !== me.id && !data.staff && (
-          <button className="btn" disabled={busy} onClick={() => act(async () => { const r = await rpc('register_competition', { _comp: id }); if (r === 'waitlist') toast("Tu es sur la liste d'attente") }, 'Inscription enregistrée')}>S'inscrire</button>
-        )}
-        {mine && ['open', 'closed'].includes(c.status) && (
-          <>
-            {checkinOpen && !mine.checked_in_at && mine.status === 'registered' && <button className="btn gold" disabled={busy} onClick={() => act(() => rpc('check_in', { _comp: id }), 'Check-in fait')}>Faire mon check-in</button>}
-            {mine.checked_in_at && <div className="small" style={{ color: 'var(--ok)' }}>Check-in effectué</div>}
-            <button className="btn ghost" disabled={busy} onClick={() => act(() => rpc('withdraw_competition', { _comp: id }), 'Retrait enregistré')}>Me retirer</button>
-          </>
-        )}
-        <ErrBox text={err} />
-      </div>
-
-      {isOrg && ['open', 'closed', 'ongoing'].includes(c.status) && (
-        <div className="card stack mt" style={{ borderColor: 'var(--gold)' }}>
-          <b>Espace organisateur</b>
-          {['open', 'closed'].includes(c.status) && (
-            <>
-              <button className="btn ghost" disabled={busy} onClick={() => act(() => rpc('set_registration_open', { _comp: id, _open: c.status !== 'open' }), c.status === 'open' ? 'Inscriptions fermées' : 'Inscriptions rouvertes')}>
-                {c.status === 'open' ? 'Fermer les inscriptions' : 'Rouvrir les inscriptions'}
-              </button>
-              <button className="btn" disabled={busy || nReg < 2} onClick={() => act(() => rpc('generate_draw', { _comp: id }), 'Tirage effectué')}>Lancer le tirage ({nReg} joueurs)</button>
-            </>
-          )}
-          {cancel === null ? (
-            <button className="btn ghost" onClick={() => setCancel('')}>Annuler la compétition</button>
-          ) : (
-            <>
-              <input className="in" placeholder="Motif de l'annulation (obligatoire)" value={cancel} onChange={(e) => setCancel(e.target.value)} />
-              <div className="row">
-                <button className="btn ghost" onClick={() => setCancel(null)}>Retour</button>
-                <button className="btn" disabled={busy || !cancel.trim()} onClick={() => act(() => rpc('cancel_competition', { _comp: id, _reason: cancel }), 'Compétition annulée')}>Confirmer</button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
+      {['open', 'closed'].includes(c.status) && <div className="card small mt">{cd ? `Début dans ${cd}` : 'Compétition à démarrer par l’organisateur'}</div>}
+      {c.status === 'ongoing' && <div className="card small mt">Compétition commencée</div>}
+      <div className="card small mt" style={{ textAlign: 'center' }}>Organisateur : <b>{names[c.organizer_id] || 'Organisateur'}</b></div>
 
       <div className="seg" style={{ margin: '14px 0' }}>
-        {[['info', 'Info'], ['part', 'Joueurs'], ['bracket', c.format === 'elim' ? 'Tableau' : 'Matchs'], ['rule', 'Règlement']].map(([k, l]) => (
+        {[['info', 'Info'], ['part', 'Participants'], ['rule', 'Règlement']].map(([k, l]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
 
-      <div className="card" style={{ minHeight: 120 }}>
-        {tab === 'info' && (
-          <div className="stack small">
-            <div>Jeu : eFootball · 1v1</div>
-            <div>Format : {FORMATS[c.format]}</div>
-            <div>Durée des matchs : {PRESETS[c.match_preset]}</div>
-            {c.prize && <div>Récompense : {c.prize}</div>}
-            {c.mandatory_live && <div>Live obligatoire pour les demi-finales et finales.</div>}
-          </div>
-        )}
-        {tab === 'part' && (
-          <div className="stack small">
-            {!active.length && <div className="muted">Aucun inscrit pour le moment.</div>}
-            {active.map((r: any) => (
-              <div key={r.user_id} className="row"><span className="grow">{names[r.user_id]}</span>
-                {r.status === 'waitlist' && <span className="badge b-wait">Attente</span>}
-                {r.status === 'eliminated' && <span className="badge b-wait">Éliminé</span>}
-                {r.checked_in_at && <span className="badge b-ok">Check-in</span>}
-              </div>
-            ))}
-          </div>
-        )}
-        {tab === 'bracket' && (
-          ms.length ? (
+      {tab === 'info' && (
+        <div className="card stack">
+          {ms.length > 0 && (
+            <div className="card stack" style={{ background: 'var(--panel2)' }}>
+              <div className="row"><b className="grow">{c.status === 'finished' ? 'Terminée' : curRound != null ? `${ROUND_NAMES(rounds, curRound)} en cours` : 'En cours'}</b><span className="small muted">{played}/{real.length} matchs</span></div>
+              <div className="pbar"><i style={{ width: (real.length ? Math.round((played / real.length) * 100) : 0) + '%' }} /></div>
+              <button className="btn ghost" onClick={() => setTab('bracket')}>Voir le tirage et l'avancement</button>
+            </div>
+          )}
+          {mine && myMs.length > 0 && (
+            <>
+              <h3>Ma compétition</h3>
+              {myMs.filter((m: any) => m.winner_id).map((m: any) => {
+                const won = m.winner_id === me.id
+                return (
+                  <button key={m.id} className="item" onClick={() => nav.go('match', { id: m.id })}>
+                    <div className="grow"><b>{roundLabel(m)}</b> <span className={'badge ' + (won ? 'b-ok' : 'b-wait')}>{won ? 'Gagné' : 'Perdu'} {m.player_a === me.id ? `${m.score_a ?? 0}–${m.score_b ?? 0}` : `${m.score_b ?? 0}–${m.score_a ?? 0}`}</span>
+                      <div className="small muted">contre {oppOf(m)}</div></div>
+                  </button>
+                )
+              })}
+              {myNext && (
+                <div className="card stack" style={{ borderColor: 'var(--gold)' }}>
+                  <b style={{ color: 'var(--gold)' }}>Prochain match : {roundLabel(myNext)}</b>
+                  <div className="small muted">Contre {oppOf(myNext)} · {fmt(myNext.scheduled_at)}</div>
+                  <button className="btn" onClick={() => nav.go('match', { id: myNext.id })}>Entrer dans la salle du match</button>
+                  <button className="btn ghost" onClick={() => nav.go('match', { id: myNext.id })}>Envoyer mon résultat</button>
+                </div>
+              )}
+            </>
+          )}
+          <div className="row small"><span className="muted grow">Type</span><b>{FORMATS[c.format]}</b></div>
+          <div className="row small"><span className="muted grow">Réglages des matchs</span><b>{PRESETS[c.match_preset]}</b></div>
+          {c.mandatory_live && <div className="small muted">Live obligatoire pour les demi-finales et la finale.</div>}
+          <h3>Récompense</h3>
+          <div className="small muted">{c.prize || 'Pas de lot pour cette compétition. On joue pour la victoire.'}</div>
+        </div>
+      )}
+      {tab === 'part' && (
+        <div className="card stack small">
+          {!active.length && <div className="muted">Aucun inscrit pour le moment.</div>}
+          {active.map((r: any) => (
+            <div key={r.user_id} className="row"><Av name={names[r.user_id]} size={32} /><span className="grow">{names[r.user_id]}{r.user_id === me.id ? ' (toi)' : ''}</span>
+              {r.status === 'waitlist' && <span className="badge b-wait">Attente</span>}
+              {r.status === 'eliminated' && <span className="badge b-wait">Éliminé</span>}
+              {r.checked_in_at && <span className="badge b-ok">Présent</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {tab === 'bracket' && (
+        <div className="card">
+          {ms.length ? (
             <div className="stack">
               {(c.phase === 'rr') && <Standings comp={id} group={null} />}
               {groups.map((g) => <div key={g}><div className="small muted" style={{ marginBottom: 4 }}>Poule {String.fromCharCode(65 + g)}</div><Standings comp={id} group={g} /></div>)}
               <Bracket matches={ms} names={names} meId={me.id} onOpen={(mid) => nav.go('match', { id: mid })} />
             </div>
-          ) : <div className="small muted">Le tirage n'a pas encore eu lieu.</div>
+          ) : <div className="small muted">Le tirage n'a pas encore eu lieu.</div>}
+        </div>
+      )}
+      {tab === 'rule' && <div className="card small pre">{c.rules || "L'organisateur n'a pas ajouté de règlement. Les règles générales d'Arena s'appliquent : forfait 10 minutes après l'heure, retour 5 minutes après une déconnexion, contestation possible après validation."}</div>}
+
+      <ErrBox text={err} />
+      <div className="stack" style={{ marginTop: 14, position: 'sticky', bottom: 74, zIndex: 4 }}>
+        {mine && ['open', 'closed'].includes(c.status) && checkinOpen && !mine.checked_in_at && mine.status === 'registered' && (
+          <button className="btn gold" disabled={busy} onClick={() => act(() => rpc('check_in', { _comp: id }), 'Présence confirmée')}>Confirmer ma présence</button>
         )}
-        {tab === 'rule' && <div className="small pre">{c.rules || "L'organisateur n'a pas ajouté de règlement. Les règles générales d'Arena s'appliquent : forfait 10 minutes après l'heure, retour 5 minutes après une déconnexion, contestation possible après validation."}</div>}
+        {c.status === 'open' && !mine && c.organizer_id !== me.id && !data.staff && (
+          <button className="btn" disabled={busy} onClick={() => act(async () => { const r = await rpc('register_competition', { _comp: id }); if (r === 'waitlist') toast("Tu es sur la liste d'attente") }, 'Inscription enregistrée')}>S'inscrire</button>
+        )}
+        {mine && ['open', 'closed'].includes(c.status) && (
+          <button className="btn ghost" style={{ background: 'var(--bg)' }} disabled={busy} onClick={() => act(() => rpc('withdraw_competition', { _comp: id }), 'Retrait enregistré')}>Inscrit ✓ · Se désinscrire</button>
+        )}
+        {!!ms.length && tab !== 'bracket' && <button className="btn ghost" style={{ background: 'var(--bg)' }} onClick={() => setTab('bracket')}>Voir le tirage et l'avancement</button>}
       </div>
     </section>
   )
 }
 
+export const TEMPLATES: [string, string, Partial<{ format: string; max: number; preset: string }>][] = [
+  ['free', 'Libre', {}],
+  ['e8', 'Élimination 8', { format: 'elim', max: 8, preset: 's' }],
+  ['e16', 'Élimination 16', { format: 'elim', max: 16, preset: 's' }],
+  ['q4', 'Coupe rapide 4', { format: 'elim', max: 4, preset: 'c' }],
+  ['r6', 'Championnat 6', { format: 'rr', max: 6, preset: 'c' }],
+  ['p16', 'Poules 16', { format: 'poules', max: 16, preset: 's' }],
+]
+const FORMAT_HINT: Record<string, string> = {
+  elim: 'Tu perds, tu sors. Le plus rapide : un seul match par tour.',
+  rr: 'Tout le monde joue contre tout le monde. Le meilleur total de points gagne.',
+  poules: 'Des poules d’abord, puis un tableau à élimination directe pour les meilleurs.',
+}
+export const timeOptions = () => Array.from({ length: 48 }, (_, i) => String(Math.floor(i / 2)).padStart(2, '0') + ':' + (i % 2 ? '30' : '00'))
+export const toLocalDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
 export function CompCreate() {
   const { nav, toast, me } = useApp()
-  const soon = new Date(Date.now() + 86400e3 - (new Date().getTimezoneOffset() * 60e3))
-  const [f, setF] = useState<any>({ name: '', rules: '', start: soon.toISOString().slice(0, 16), max: 16, format: 'elim', preset: 's', live: false, prize: '' })
+  const tomorrow = new Date(Date.now() + 86400e3)
+  const [tpl, setTpl] = useState('free')
+  const [f, setF] = useState<any>({ name: '', rules: '', date: toLocalDate(tomorrow), time: '20:00', close: '', max: 16, gap: 45, format: 'elim', preset: 's', live: true, prize: '' })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
+  const pick = (k: string, p: any) => { setTpl(k); setF({ ...f, ...p }) }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setErr('')
-    const n = Number(f.max)
+    const n = Number(f.max), gap = Number(f.gap)
     if (f.name.trim().length < 3) return setErr('Le nom doit faire 3 caractères minimum.')
-    if (!(n >= 2 && n <= 128)) return setErr('Nombre de joueurs : entre 2 et 128.')
-    const start = new Date(f.start)
+    if (!(n >= 2 && n <= 128)) return setErr('Nombre de places : entre 2 et 128.')
+    if (!(gap >= 5 && gap <= 480)) return setErr('Écart entre deux tours : 5 à 480 minutes.')
+    if (!f.date) return setErr('Choisis la date de début.')
+    const start = new Date(f.date + 'T' + f.time + ':00')
     if (isNaN(start.getTime()) || start.getTime() < Date.now()) return setErr('Choisis une date de début dans le futur.')
+    let close: string | null = null
+    if (f.close) {
+      const cl = new Date(f.close + 'T' + f.time + ':00')
+      if (cl.getTime() > start.getTime()) return setErr('La fin des inscriptions doit être avant le début.')
+      close = cl.toISOString()
+    }
     setBusy(true)
     try {
       const row = await q<any>(sb.from('competitions').insert({
         game_id: 'efb', organizer_id: me.id, name: f.name.trim(), rules: f.rules.trim() || null, start_at: start.toISOString(),
-        max_players: n, format: f.format, match_preset: f.preset, mandatory_live: f.live, prize: f.prize.trim() || null,
+        registration_close_at: close, max_players: n, round_gap_minutes: gap, format: f.format, match_preset: f.preset, mandatory_live: f.live, prize: f.prize.trim() || null,
       }).select('id').single())
-      toast('Compétition créée')
+      toast('Compétition publiée')
       nav.replace('cdetail', { id: row.id })
     } catch (e: any) { setErr(errMsg(e)) }
     setBusy(false)
@@ -299,20 +360,31 @@ export function CompCreate() {
     <section className="screen">
       <Top title="Créer une compétition" />
       <form className="stack" onSubmit={submit} noValidate>
-        <label className="f">Nom<input className="in" value={f.name} onChange={set('name')} maxLength={80} /></label>
-        <label className="f">Début<input className="in" type="datetime-local" value={f.start} onChange={set('start')} /></label>
-        <label className="f">Nombre de joueurs max<input className="in" type="number" inputMode="numeric" value={f.max} onChange={set('max')} /></label>
-        <label className="f">Format
-          <select className="in" value={f.format} onChange={set('format')}>{Object.entries(FORMATS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-        </label>
-        <label className="f">Durée des matchs
-          <select className="in" value={f.preset} onChange={set('preset')}>{Object.entries(PRESETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-        </label>
-        <label className="f">Récompense (facultatif)<input className="in" value={f.prize} onChange={set('prize')} /></label>
-        <label className="f">Règlement (facultatif)<textarea className="in" value={f.rules} onChange={set('rules')} /></label>
-        <label className="row small muted" style={{ gap: 8 }}><input type="checkbox" checked={f.live} onChange={set('live')} /> Live obligatoire en demi-finales et finales</label>
+        <div className="f"><span className="small muted">Modèle</span>
+          <div className="seg wrap" style={{ marginTop: 6 }}>{TEMPLATES.map(([k, l, p]) => <button type="button" key={k} className={tpl === k ? 'on' : ''} onClick={() => pick(k, p)}>{l}</button>)}</div></div>
+        <div className="f"><span className="small muted">Type de compétition</span>
+          <div className="seg wrap" style={{ marginTop: 6 }}>{Object.entries(FORMATS).map(([k, l]) => <button type="button" key={k} className={f.format === k ? 'on' : ''} onClick={() => setF({ ...f, format: k })}>{l}</button>)}</div>
+          <div className="small muted" style={{ marginTop: 6 }}>{FORMAT_HINT[f.format]}</div></div>
+        <label className="f">Nom<input className="in" value={f.name} onChange={set('name')} maxLength={80} placeholder="Ex : Coupe de Ouaga eFootball" /></label>
+        <label className="f">Jeu<select className="in" disabled><option>eFootball</option></select></label>
+        <div className="row" style={{ alignItems: 'flex-end' }}>
+          <label className="f grow">Date de début<input className="in" type="date" value={f.date} onChange={set('date')} /></label>
+          <label className="f grow">Heure de début<select className="in" value={f.time} onChange={set('time')}>{timeOptions().map((t) => <option key={t}>{t}</option>)}</select></label>
+        </div>
+        <label className="f">Fin des inscriptions (optionnel)<input className="in" type="date" value={f.close} onChange={set('close')} />
+          <span className="small muted">Si tu ne choisis rien, les inscriptions ferment 1 heure avant le début. Heure d'Ouagadougou.</span></label>
+        <label className="f">Nombre de places<input className="in" type="number" inputMode="numeric" value={f.max} onChange={set('max')} /></label>
+        <label className="f">Écart entre deux tours (minutes)<input className="in" type="number" inputMode="numeric" value={f.gap} onChange={set('gap')} /></label>
+        <div className="f"><span className="small muted">Réglages des matchs</span>
+          <div className="seg" style={{ marginTop: 6 }}>{[['c', 'Court'], ['s', 'Standard'], ['l', 'Long']].map(([k, l]) => <button type="button" key={k} className={f.preset === k ? 'on' : ''} onClick={() => setF({ ...f, preset: k })}>{l}</button>)}</div>
+          <div className="small muted" style={{ marginTop: 6 }}>{PRESET_TXT[f.preset]}</div>
+          <div className="small muted">Vérifie que ces réglages existent dans ta version de eFootball.</div>
+          <div className="small muted">Après le tirage, Arena propose un horaire pour chaque tour, selon l'écart choisi plus haut.</div></div>
+        <label className="f">Récompense du 1er (optionnelle)<input className="in" value={f.prize} onChange={set('prize')} placeholder="Ex. maillot, casque, bon d'achat" maxLength={80} /></label>
+        <label className="f">Règlement<textarea className="in" value={f.rules} onChange={set('rules')} placeholder="Format, horaires, conditions de participation…" /></label>
+        <label className="item"><span className="grow small">Diffusion obligatoire des demi-finales et de la finale</span><input type="checkbox" className="sw" checked={f.live} onChange={set('live')} /></label>
         <ErrBox text={err} />
-        <button className="btn" type="submit" disabled={busy}>{busy ? 'Création…' : 'Créer la compétition'}</button>
+        <button className="btn" type="submit" disabled={busy}>{busy ? 'Publication…' : 'Publier la compétition'}</button>
       </form>
     </section>
   )

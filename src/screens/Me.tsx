@@ -1,10 +1,12 @@
 import React, { useState } from 'react'
 import { sb } from '../lib/supabase'
 import { useApp, useLoad, q, rpc, fmt, Top, Spin, ErrBox, errMsg } from '../lib/ui'
+import { OrganizerHome } from './Manage'
 
 export function Me() {
   const { me, nav, refreshMe, toast } = useApp()
   const [efb, setEfb] = useState<string | null>(null)
+  const [size, setSize] = useState(() => { try { return localStorage.getItem('arena_scale') || 'g' } catch { return 'g' } })
   const { data, loading } = useLoad(async () => {
     const [st, rep, org, titles] = await Promise.all([
       rpc('player_stats', { _uid: me.id }),
@@ -80,6 +82,14 @@ export function Me() {
         {me.roles.includes('admin') && <button onClick={() => nav.go('admin')}>Panel administrateur <span>›</span></button>}
         <button onClick={() => sb.auth.signOut()}>Se déconnecter <span>›</span></button>
       </div>
+      <div className="card stack" style={{ marginTop: 14 }}>
+        <b>Taille du texte</b>
+        <div className="seg">
+          {[['p', 'Petit'], ['n', 'Normal'], ['g', 'Grand'], ['t', 'Très grand']].map(([k, l]) => (
+            <button key={k} className={size === k ? 'on' : ''} onClick={() => { try { localStorage.setItem('arena_scale', k) } catch { /* */ } setSize(k); (window as any).__arenaRefit?.() }}>{l}</button>
+          ))}
+        </div>
+      </div>
       <div className="small muted" style={{ textAlign: 'center', marginTop: 14, opacity: .6 }}>
         {(() => { const f = (window as any).__arenaFit; return f ? `écran ${f.w}px · zoom ${Number(f.z).toFixed(2)} · dpr ${f.dpr}` : '' })()}
       </div>
@@ -126,17 +136,7 @@ export function Organizer() {
     setErr('')
     try { await q(sb.from('organizer_requests').insert({ user_id: me.id, message: msg.trim() || null })); setSent(true) } catch (e: any) { setErr(errMsg(e)) }
   }
-  if (isOrg) {
-    return (
-      <section className="screen">
-        <Top title="Espace organisateur" />
-        <div className="stack">
-          <button className="btn" onClick={() => nav.go('ccreate')}>Créer une compétition</button>
-          <button className="btn ghost" onClick={() => nav.go('mycomps')}>Mes compétitions</button>
-        </div>
-      </section>
-    )
-  }
+  if (isOrg) return <OrganizerHome />
   return (
     <section className="screen">
       <Top title="Devenir organisateur" />
