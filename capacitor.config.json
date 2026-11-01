@@ -1,0 +1,7 @@
+{
+  "appId": "app.arena.gamehub",
+  "appName": "Arena Game Hub",
+  "webDir": "dist",
+  "backgroundColor": "#070B16",
+  "android": { "backgroundColor": "#070B16" }
+}
