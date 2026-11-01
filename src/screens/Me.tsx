@@ -65,11 +65,6 @@ export function Me() {
               </div>
             </>
           )}
-          <div className="card mt" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)' }}>
-            <div className="stat"><b>{st?.wins ?? 0}</b><span className="small muted">Victoires</span></div>
-            <div className="stat"><b>{st?.losses ?? 0}</b><span className="small muted">Défaites</span></div>
-            <div className="stat"><b>{data?.titles ?? 0}</b><span className="small muted">Titres</span></div>
-          </div>
           {st?.suspended_until && (
             <div className="card mt small" style={{ borderColor: '#ff8a3d', color: '#ffb86b' }}>
               Inscriptions suspendues jusqu'au {fmt(st.suspended_until)} (abandons ou absences répétés).
@@ -83,6 +78,9 @@ export function Me() {
         <button onClick={() => nav.go('notifs')}>Notifications <span>›</span></button>
         <button onClick={() => nav.go('organizer')}>{isOrg ? 'Espace organisateur' : 'Devenir organisateur'} <span>›</span></button>
         <button onClick={() => sb.auth.signOut()}>Se déconnecter <span>›</span></button>
+      </div>
+      <div className="small muted" style={{ textAlign: 'center', marginTop: 14, opacity: .6 }}>
+        {(() => { const f = (window as any).__arenaFit; return f ? `écran ${f.w}px · zoom ${Number(f.z).toFixed(2)} · dpr ${f.dpr}` : '' })()}
       </div>
     </section>
   )

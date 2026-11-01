@@ -6,10 +6,15 @@ import App from './App'
 // Largeur de référence 360 px (celle de l'artefact) : sur un téléphone dont l'affichage est
 // agrandi (peu de pixels CSS), on réduit l'échelle pour retrouver les mêmes proportions.
 function fit() {
-  const base = Math.min(window.screen.width || 360, window.screen.height || 360)
-  ;(document.documentElement.style as any).zoom = String(base < 360 ? base / 360 : 1)
+  const el = document.documentElement as any
+  el.style.zoom = '1'
+  const w = el.clientWidth || window.innerWidth
+  const z = w < 360 ? w / 360 : 1
+  el.style.zoom = String(z)
+  ;(window as any).__arenaFit = { w: Math.round(w), z: Math.round(z * 100) / 100, dpr: window.devicePixelRatio }
 }
 fit()
 window.addEventListener('resize', fit)
+window.addEventListener('orientationchange', fit)
 
 createRoot(document.getElementById('app')!).render(<App />)

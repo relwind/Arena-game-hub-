@@ -28,8 +28,28 @@ export async function q<T = any>(p: PromiseLike<{ data: T | null; error: any }>)
   return data as T
 }
 
-const DT: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
-export const fmt = (d?: string | null) => (d ? new Date(d).toLocaleString('fr-FR', DT) : '–')
+export const fmt = (d?: string | null) => {
+  if (!d) return '–'
+  const x = new Date(d)
+  const day = x.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })
+  return day + ' à ' + x.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+}
+export function inTxt(d?: string | null) {
+  if (!d) return ''
+  const ms = new Date(d).getTime() - Date.now()
+  if (ms < 0) return 'En cours'
+  const m = Math.round(ms / 60000)
+  if (m < 60) return 'Dans ' + Math.max(1, m) + ' min'
+  const h = Math.round(m / 60)
+  if (h < 24) return 'Dans ' + h + ' h'
+  return 'Dans ' + Math.round(h / 24) + ' j'
+}
+export function leftTxt(d?: string | null) {
+  const ms = new Date(d || 0).getTime() - Date.now()
+  if (ms <= 0) return ''
+  const m = Math.floor(ms / 60000), h = Math.floor(m / 60)
+  return 'dans ' + (h ? h + ' h ' : '') + (m % 60) + ' min'
+}
 export const hhmm = (d?: string | null) => (d ? new Date(d).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '–')
 
 export const FORMATS: Record<string, string> = { elim: 'Élimination directe', rr: 'Championnat', poules: 'Poules + élimination' }
@@ -106,4 +126,36 @@ export async function namesOf(ids: (string | null | undefined)[]): Promise<Recor
   const o: Record<string, string> = {}
   rows.forEach((r) => (o[r.id] = r.username))
   return o
+}
+
+export function GameArt({ size = 54 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 54 54" width={size} height={size} style={{ flex: 'none', borderRadius: 12 }} aria-hidden="true">
+      <rect width="54" height="54" rx="12" fill="#1c7a3f" />
+      <path d="M2 27h50M27 2v50" stroke="#ffffff33" strokeWidth="1" />
+      <rect x="6" y="6" width="42" height="42" rx="11" fill="#241157" />
+      <circle cx="19" cy="17" r="3" fill="#35D0FF" /><circle cx="14" cy="40" r="5" fill="#d946ef" /><circle cx="40" cy="14" r="2.5" fill="#35D0FF" />
+      <circle cx="27" cy="27" r="13" fill="#fff" />
+      <path d="M27 21l5 3.6-1.9 5.8h-6.2L22 24.6z" fill="#241157" />
+      <path d="M27 21v-6M32 24.6l5.6-1.8M30.1 30.4l3.4 4.8M23.9 30.4l-3.4 4.8M22 24.6l-5.6-1.8" stroke="#241157" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function Av({ name, size = 40 }: { name?: string; size?: number }) {
+  const h = Array.from(name || '?').reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7)
+  return (
+    <div className="tile" style={{ width: size, height: size, borderRadius: '50%', fontSize: size * 0.4, background: `linear-gradient(135deg,hsl(${h} 70% 55%),hsl(${(h + 40) % 360} 75% 45%))` }}>
+      {(name || '?').slice(0, 1).toUpperCase()}
+    </div>
+  )
+}
+
+export async function openEfootball(toast: (t: string) => void) {
+  try {
+    const { AppLauncher } = await import('@capacitor/app-launcher')
+    await AppLauncher.openUrl({ url: 'jp.konami.pesam' })
+  } catch {
+    toast("Impossible d'ouvrir eFootball : vérifie qu'il est installé.")
+  }
 }

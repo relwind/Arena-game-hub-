@@ -39,4 +39,11 @@ const bars = `        <item name="android:statusBarColor">#070B16</item>
 styles = styles.replace(/(<style name="AppTheme\.NoActionBar"[^>]*>)/, '$1\n' + bars)
 fs.writeFileSync(stylesPath, styles)
 
+const manPath = 'android/app/src/main/AndroidManifest.xml'
+let man = fs.readFileSync(manPath, 'utf8')
+if (!man.includes('jp.konami.pesam')) {
+  man = man.replace('<application', '<queries>\n        <package android:name="jp.konami.pesam" />\n    </queries>\n\n    <application')
+  fs.writeFileSync(manPath, man)
+}
+
 console.log('Identité Arena appliquée.')

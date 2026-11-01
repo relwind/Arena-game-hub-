@@ -1,43 +1,75 @@
 import React, { useState } from 'react'
 import { sb } from '../lib/supabase'
-import { useApp, useLoad, q, rpc, fmt, hhmm, STATUS, FORMATS, PRESETS, Top, Spin, ErrBox, errMsg, namesOf } from '../lib/ui'
+import { useApp, useLoad, q, rpc, fmt, hhmm, STATUS, FORMATS, PRESETS, Top, Spin, ErrBox, errMsg, namesOf, GameArt } from '../lib/ui'
 
 const GROUPS: Record<string, string[]> = { avenir: ['open', 'closed'], encours: ['ongoing'], termine: ['finished', 'cancelled'] }
+
+const DAYS = Array.from({ length: 14 }, (_, i) => i)
+const dayKey = (d: Date) => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()
 
 export function Comps() {
   const { me, nav } = useApp()
   const [tab, setTab] = useState('avenir')
+  const [scope, setScope] = useState('Toutes')
+  const [day, setDay] = useState(-1)
   const [search, setSearch] = useState('')
   const { data, loading, err } = useLoad(async () => {
-    const rows = await q<any[]>(sb.from('competitions').select('id,name,status,start_at,max_players,format,organizer_id,registrations(count)').in('status', GROUPS[tab]).order('start_at', { ascending: tab === 'avenir' }).limit(60))
+    const [rows, mine] = await Promise.all([
+      q<any[]>(sb.from('competitions').select('id,name,status,start_at,max_players,format,organizer_id,prize,registrations(count)').in('status', GROUPS[tab]).order('start_at', { ascending: tab === 'avenir' }).limit(80)),
+      q<any[]>(sb.from('registrations').select('competition_id').eq('user_id', me.id).in('status', ['registered', 'waitlist', 'eliminated', 'done'])),
+    ])
     const names = await namesOf(rows.map((r) => r.organizer_id))
-    return rows.map((r) => ({ ...r, org: names[r.organizer_id] || 'Organisateur', n: r.registrations?.[0]?.count || 0 }))
+    const mySet = new Set(mine.map((m) => m.competition_id))
+    return rows.map((r) => ({ ...r, org: names[r.organizer_id] || 'Organisateur', n: r.registrations?.[0]?.count || 0, joined: mySet.has(r.id) }))
   }, [tab], 20000)
-  const list = (data || []).filter((c: any) => !search || (c.name + ' ' + c.org).toLowerCase().includes(search.toLowerCase()))
+
+  const showDays = tab === 'avenir' && !search.trim()
+  const days = DAYS.map((i) => {
+    const d = new Date(); d.setDate(d.getDate() + i)
+    const n = (data || []).filter((c: any) => dayKey(new Date(c.start_at)) === dayKey(d)).length
+    return { i, wd: i === 0 ? 'auj.' : d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', ''), num: d.getDate(), n, key: dayKey(d) }
+  })
+  const list = (data || []).filter((c: any) => {
+    const t = search.trim().toLowerCase()
+    if (t && !(c.name + ' ' + c.org).toLowerCase().includes(t)) return false
+    if (scope !== 'Toutes' && !c.joined) return false
+    if (showDays && day >= 0 && dayKey(new Date(c.start_at)) !== days[day].key) return false
+    return true
+  })
   const isOrg = me.roles.includes('organizer') || me.roles.includes('admin')
 
   return (
     <section className="screen">
-      <Top title="Compétitions" back={false} right={isOrg ? <button className="badge b-ok" style={{ border: 0 }} onClick={() => nav.go('ccreate')}>+ Créer</button> : undefined} />
+      <div className="top"><h2>Compétitions</h2>{isOrg && <button className="badge b-ok" style={{ border: 0 }} onClick={() => nav.go('ccreate')}>+ Créer</button>}</div>
       <input className="in" placeholder="Rechercher (nom ou organisateur)" maxLength={40} style={{ marginBottom: 10 }} value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="seg" style={{ marginBottom: 10 }}>
+        {['Toutes', 'Mes inscriptions'].map((k) => <button key={k} className={scope === k ? 'on' : ''} onClick={() => setScope(k)}>{k}</button>)}
+      </div>
       <div className="seg" style={{ marginBottom: 14 }}>
         {[['avenir', 'À venir'], ['encours', 'En cours'], ['termine', 'Terminés']].map(([k, l]) => (
-          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
+          <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); setDay(-1) }}>{l}</button>
         ))}
       </div>
+      {showDays && (
+        <div className="dstrip">
+          <button type="button" className={'dcard' + (day < 0 ? ' on' : '') + ((data || []).length ? ' has' : '')} onClick={() => setDay(-1)}><small>Tous</small><b>{(data || []).length}</b><i /></button>
+          {days.map((d) => (
+            <button key={d.i} type="button" className={'dcard' + (day === d.i ? ' on' : '') + (d.n ? ' has' : '')} onClick={() => setDay(d.i)}><small>{d.wd}</small><b>{d.num}</b><i /></button>
+          ))}
+        </div>
+      )}
       <ErrBox text={err} />
       {loading && !data ? <Spin /> : (
         <div className="stack">
-          {!list.length && <div className="card small muted">Aucune compétition ici.</div>}
+          {!list.length && <div className="card small muted">{day >= 0 && showDays ? 'Aucune compétition ce jour-là. Choisis un autre jour.' : scope !== 'Toutes' ? "Tu n'es inscrit à aucune compétition ici. Passe sur « Toutes » pour t'inscrire." : 'Aucune compétition dans cette catégorie.'}</div>}
           {list.map((c: any) => (
             <button key={c.id} className="item" onClick={() => nav.go('cdetail', { id: c.id })}>
-              <div className="tile" style={{ background: 'linear-gradient(135deg,#1b3d9a,#35d0ff)' }}>EF</div>
-              <div className="grow">
-                <b>{c.name}</b>
-                <div className="small muted">{c.org} · {fmt(c.start_at)}</div>
-                <div className="small muted">{c.n}/{c.max_players} joueurs · {FORMATS[c.format]}</div>
+              <GameArt size={54} />
+              <div className="grow"><b>{c.name}</b><div className="small muted">{fmt(c.start_at)} · {c.n}/{c.max_players} inscrits</div></div>
+              <div style={{ textAlign: 'right' }}>
+                <div className={'badge ' + (c.status === 'cancelled' ? 'b-wait' : c.joined ? 'b-ok' : 'b-gold')}>{c.status === 'cancelled' ? 'Annulé' : c.joined ? 'Inscrit' : 'Gratuit'}</div>
+                {c.prize && <div className="small muted" style={{ marginTop: 4 }}>Lot : {c.prize}</div>}
               </div>
-              <span className={'badge ' + STATUS[c.status][1]}>{STATUS[c.status][0]}</span>
             </button>
           ))}
         </div>

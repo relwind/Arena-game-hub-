@@ -7,7 +7,8 @@ import { Home } from './screens/Home'
 import { Comps, CompDetail, CompCreate, MyComps } from './screens/Comps'
 import { MatchRoom, MyMatches } from './screens/Match'
 import { Me, Notifs, Organizer } from './screens/Me'
-import { Play } from './screens/Play'
+import { Play, RoomCreate, RoomJoin, Room, RoomPlay } from './screens/Play'
+import { Search, Rules } from './screens/Search'
 import { Live } from './screens/Live'
 
 const TABS: { name: string; label: string; icon: string }[] = [
@@ -18,6 +19,11 @@ const TABS: { name: string; label: string; icon: string }[] = [
   { name: 'me', label: 'Profil', icon: 'M12 4a4 4 0 100 8 4 4 0 000-8zM4 21c0-4 4-6 8-6s8 2 8 6' },
 ]
 const TAB_NAMES = TABS.map((t) => t.name)
+const SECTION: Record<string, string> = {
+  rcreate: 'play', rjoin: 'play', room: 'play', rplay: 'play',
+  cdetail: 'comps', ccreate: 'comps', mycomps: 'comps', match: 'comps', mymatches: 'comps',
+  notifs: 'me', organizer: 'me', search: 'home', rules: 'home',
+}
 
 export default function App() {
   const [session, setSession] = useState<any>(undefined)
@@ -91,7 +97,8 @@ export default function App() {
   if (session === undefined) return <Spin />
 
   const cur = stack[stack.length - 1]
-  const showTabs = !!session && !!me && TAB_NAMES.includes(cur.name)
+  const showTabs = !!session && !!me && cur.name !== 'rplay'
+  const section = TAB_NAMES.includes(cur.name) ? cur.name : SECTION[cur.name] || 'home'
   const ctx = { nav, me, toast, refreshMe: () => (session ? loadMe(session.user.id) : Promise.resolve()) }
 
   let view: React.ReactNode
@@ -110,6 +117,12 @@ export default function App() {
       case 'match': view = <MatchRoom id={cur.p.id} />; break
       case 'mymatches': view = <MyMatches />; break
       case 'play': view = <Play />; break
+      case 'rcreate': view = <RoomCreate />; break
+      case 'rjoin': view = <RoomJoin />; break
+      case 'room': view = <Room id={cur.p.id} />; break
+      case 'rplay': view = <RoomPlay id={cur.p.id} />; break
+      case 'search': view = <Search />; break
+      case 'rules': view = <Rules />; break
       case 'live': view = <Live />; break
       case 'me': view = <Me />; break
       case 'notifs': view = <Notifs />; break
@@ -124,7 +137,7 @@ export default function App() {
       {showTabs && (
         <nav className="tabbar">
           {TABS.map((t) => (
-            <button key={t.name} className={cur.name === t.name ? 'on' : ''} onClick={() => nav.tab(t.name)}>
+            <button key={t.name} className={section === t.name ? 'on' : ''} onClick={() => nav.tab(t.name)}>
               <svg viewBox="0 0 24 24"><path d={t.icon} /></svg>
               {t.label}
             </button>
