@@ -9,6 +9,7 @@ import { MatchRoom, MyMatches } from './screens/Match'
 import { Me, Notifs, Organizer } from './screens/Me'
 import { Play, RoomCreate, RoomJoin, Room, RoomPlay } from './screens/Play'
 import { Search, Rules } from './screens/Search'
+import { Admin } from './screens/Admin'
 import { Live } from './screens/Live'
 
 const TABS: { name: string; label: string; icon: string }[] = [
@@ -22,7 +23,7 @@ const TAB_NAMES = TABS.map((t) => t.name)
 const SECTION: Record<string, string> = {
   rcreate: 'play', rjoin: 'play', room: 'play', rplay: 'play',
   cdetail: 'comps', ccreate: 'comps', mycomps: 'comps', match: 'comps', mymatches: 'comps',
-  notifs: 'me', organizer: 'me', search: 'home', rules: 'home',
+  notifs: 'me', organizer: 'me', admin: 'me', search: 'home', rules: 'home',
 }
 
 export default function App() {
@@ -129,6 +130,7 @@ export default function App() {
       case 'room': view = <Room id={cur.p.id} />; break
       case 'rplay': view = <RoomPlay id={cur.p.id} />; break
       case 'search': view = <Search />; break
+      case 'admin': view = <Admin />; break
       case 'rules': view = <Rules />; break
       case 'live': view = <Live />; break
       case 'me': view = <Me />; break

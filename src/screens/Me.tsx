@@ -77,6 +77,7 @@ export function Me() {
         <button onClick={() => nav.go('mymatches')}>Mes matchs <span>›</span></button>
         <button onClick={() => nav.go('notifs')}>Notifications <span>›</span></button>
         <button onClick={() => nav.go('organizer')}>{isOrg ? 'Espace organisateur' : 'Devenir organisateur'} <span>›</span></button>
+        {me.roles.includes('admin') && <button onClick={() => nav.go('admin')}>Panel administrateur <span>›</span></button>}
         <button onClick={() => sb.auth.signOut()}>Se déconnecter <span>›</span></button>
       </div>
       <div className="small muted" style={{ textAlign: 'center', marginTop: 14, opacity: .6 }}>
@@ -89,12 +90,14 @@ export function Me() {
 export function Notifs() {
   const { me } = useApp()
   const { data, loading, reload } = useLoad(() => q<any[]>(sb.from('notifications').select('id,body,kind,read_at,created_at').eq('user_id', me.id).order('created_at', { ascending: false }).limit(60)), [me.id])
+  const { data: bc } = useLoad(() => q<any[]>(sb.from('broadcasts').select('id,title,body,created_at').order('created_at', { ascending: false }).limit(3)), [me.id])
   const readAll = async () => { await sb.from('notifications').update({ read_at: new Date().toISOString() }).eq('user_id', me.id).is('read_at', null); reload() }
   return (
     <section className="screen">
       <Top title="Notifications" right={<button className="small" style={{ background: 'none', border: 0, color: 'var(--cyan)' }} onClick={readAll}>Tout lire</button>} />
       {loading && !data ? <Spin /> : (
         <div className="stack">
+          {bc?.map((b: any) => <div key={b.id} className="card small" style={{ borderColor: 'var(--gold)' }}><b>📢 {b.title}</b><div>{b.body}</div><div className="muted" style={{ marginTop: 4 }}>{fmt(b.created_at)}</div></div>)}
           {!data?.length && <div className="card small muted">Aucune notification.</div>}
           {data?.map((n: any) => (
             <div key={n.id} className="card small" style={n.read_at ? { opacity: .65 } : { borderColor: 'var(--blue)' }}>
