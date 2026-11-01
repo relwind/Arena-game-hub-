@@ -60,7 +60,7 @@ export function Home() {
           <h2 style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Bonjour, {me.profile?.username}</h2>
           <div className="small muted">Prêt à jouer ?</div>
         </div>
-        <button className="ib" onClick={() => nav.go('search')} aria-label="Amis"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg></button>
+        <button className="ib" onClick={() => nav.go('messages')} aria-label="Messages"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg></button>
         <button className="ib" onClick={() => nav.go('notifs')} aria-label="Notifications">
           <svg viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0112 0v6l2 2H4zM10 21h4" /></svg>
           {!!data?.unread && <span className="cnt">{data.unread}</span>}
