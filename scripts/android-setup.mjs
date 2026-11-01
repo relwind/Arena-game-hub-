@@ -30,4 +30,13 @@ fs.mkdirSync(path.join(res, 'mipmap-anydpi-v26'), { recursive: true })
 for (const n of ['ic_launcher.xml', 'ic_launcher_round.xml'])
   fs.writeFileSync(path.join(res, 'mipmap-anydpi-v26', n), adaptive)
 
+const stylesPath = path.join(res, 'values/styles.xml')
+let styles = fs.readFileSync(stylesPath, 'utf8')
+const bars = `        <item name="android:statusBarColor">#070B16</item>
+        <item name="android:navigationBarColor">#070B16</item>
+        <item name="android:windowLightStatusBar">false</item>
+`
+styles = styles.replace(/(<style name="AppTheme\.NoActionBar"[^>]*>)/, '$1\n' + bars)
+fs.writeFileSync(stylesPath, styles)
+
 console.log('Identité Arena appliquée.')

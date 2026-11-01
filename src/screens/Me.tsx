@@ -6,16 +6,16 @@ export function Me() {
   const { me, nav, refreshMe, toast } = useApp()
   const [efb, setEfb] = useState<string | null>(null)
   const { data, loading } = useLoad(async () => {
-    const [st, rep, org] = await Promise.all([
+    const [st, rep, org, titles] = await Promise.all([
       rpc('player_stats', { _uid: me.id }),
       rpc('reputation_of', { _uid: me.id }),
       me.roles.includes('organizer') ? rpc('organizer_stats', { _uid: me.id }) : Promise.resolve(null),
+      sb.from('competitions').select('id', { count: 'exact', head: true }).eq('champion_id', me.id),
     ])
-    return { st: st?.[0] || st, rep, org: org?.[0] || org }
+    return { st: st?.[0] || st, rep, org: org?.[0] || org, titles: titles.count || 0 }
   }, [me.id])
   const isOrg = me.roles.includes('organizer')
   const st = data?.st
-  const lvlClass = !st ? 'b-wait' : ['Excellent', 'Fiable'].includes(st.level) ? 'b-ok' : st.level === 'Correct' ? 'b-gold' : 'b-wait'
 
   const saveEfb = async () => {
     try {
@@ -65,12 +65,16 @@ export function Me() {
               </div>
             </>
           )}
-          <div className="card mt">
-            <div className="row"><b className="grow">Ma fiabilité</b><span className={'badge ' + lvlClass}>{st?.level || 'Nouveau'}</span></div>
-            <div className="small muted" style={{ marginTop: 6 }}>{st?.played ?? 0} match(s) · {st?.quits ?? 0} abandon(s) · {st?.noshows ?? 0} absence(s)</div>
-            {st?.suspended_until && <div className="small" style={{ color: '#ffb86b', marginTop: 6 }}>Inscriptions suspendues jusqu'au {fmt(st.suspended_until)}.</div>}
-            <div className="small muted" style={{ marginTop: 6 }}>1 abandon : avertissement · 2 en 30 jours : suspension 24 h · 3 : 7 jours.</div>
+          <div className="card mt" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)' }}>
+            <div className="stat"><b>{st?.wins ?? 0}</b><span className="small muted">Victoires</span></div>
+            <div className="stat"><b>{st?.losses ?? 0}</b><span className="small muted">Défaites</span></div>
+            <div className="stat"><b>{data?.titles ?? 0}</b><span className="small muted">Titres</span></div>
           </div>
+          {st?.suspended_until && (
+            <div className="card mt small" style={{ borderColor: '#ff8a3d', color: '#ffb86b' }}>
+              Inscriptions suspendues jusqu'au {fmt(st.suspended_until)} (abandons ou absences répétés).
+            </div>
+          )}
         </>
       )}
 
