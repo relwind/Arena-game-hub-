@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { sb } from '../lib/supabase'
 import { uploadProof, ProofLink } from '../lib/img'
-import { useApp, useLoad, q, rpc, fmt, hhmm, Top, Spin, ErrBox, errMsg, namesOf } from '../lib/ui'
+import { useApp, useLoad, q, rpc, fmt, hhmm, leftTxt, Top, Spin, ErrBox, errMsg, namesOf, GameArt } from '../lib/ui'
 
 export function MatchRoom({ id }: { id: string }) {
   const { me, toast } = useApp()
@@ -242,27 +242,63 @@ export function MatchRoom({ id }: { id: string }) {
 
 export function MyMatches() {
   const { me, nav } = useApp()
+  const [tab, setTab] = useState<'up' | 'past'>('up')
   const { data, loading } = useLoad(async () => {
-    const ms = await q<any[]>(sb.from('matches').select('id,player_a,player_b,winner_id,score_a,score_b,scheduled_at,forfeit,competition_id').eq('bye', false)
-      .or(`player_a.eq.${me.id},player_b.eq.${me.id}`).order('scheduled_at', { ascending: false }).limit(50))
+    const ms = await q<any[]>(sb.from('matches').select('id,player_a,player_b,winner_id,score_a,score_b,scheduled_at,forfeit,competition_id,phase,round_index').eq('bye', false)
+      .or(`player_a.eq.${me.id},player_b.eq.${me.id}`).order('scheduled_at', { ascending: false }).limit(80))
+    const compIds = Array.from(new Set(ms.map((m) => m.competition_id)))
+    const comps = compIds.length ? await q<any[]>(sb.from('competitions').select('id,name,image_url').in('id', compIds)) : []
     const names = await namesOf(ms.flatMap((m) => [m.player_a, m.player_b]))
-    return { ms, names }
-  }, [me.id])
+    const compOf: Record<string, any> = {}
+    comps.forEach((c) => (compOf[c.id] = c))
+    return { ms, names, compOf }
+  }, [me.id], 20000)
+
+  const upcoming = (data?.ms || []).filter((m: any) => !m.winner_id).sort((a: any, b: any) => (a.scheduled_at || '').localeCompare(b.scheduled_at || ''))
+  const past = (data?.ms || []).filter((m: any) => m.winner_id)
+  const list = tab === 'up' ? upcoming : past
+
+  const dayOf = (d?: string) => (d ? new Date(d).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Date à définir')
+  const groups: [string, any[]][] = []
+  list.forEach((m: any) => {
+    const k = tab === 'up' ? dayOf(m.scheduled_at) : (new Date(m.scheduled_at || m.id).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }))
+    const g = groups.find((x) => x[0] === k)
+    if (g) g[1].push(m); else groups.push([k, [m]])
+  })
+
   return (
     <section className="screen">
-      <Top title="Mes matchs" />
+      <Top title="Mon planning" />
+      <div className="seg" style={{ marginBottom: 14 }}>
+        <button className={tab === 'up' ? 'on' : ''} onClick={() => setTab('up')}>À venir{upcoming.length ? ` (${upcoming.length})` : ''}</button>
+        <button className={tab === 'past' ? 'on' : ''} onClick={() => setTab('past')}>Terminés</button>
+      </div>
       {loading && !data ? <Spin /> : (
         <div className="stack">
-          {!data?.ms.length && <div className="card small muted">Aucun match pour le moment.</div>}
-          {data?.ms.map((m: any) => {
-            const opp = m.player_a === me.id ? m.player_b : m.player_a
-            return (
-              <button key={m.id} className="item" onClick={() => nav.go('match', { id: m.id })}>
-                <div className="grow"><b>vs {data.names[opp] || 'à déterminer'}</b><div className="small muted">{fmt(m.scheduled_at)}</div></div>
-                {m.winner_id ? <span className={'badge ' + (m.winner_id === me.id ? 'b-ok' : 'b-wait')}>{m.winner_id === me.id ? 'Victoire' : 'Défaite'}{!m.forfeit ? ` ${m.score_a}-${m.score_b}` : ''}</span> : <span className="badge b-gold">À jouer</span>}
-              </button>
-            )
-          })}
+          {!list.length && <div className="card small muted">{tab === 'up' ? "Aucun match prévu. Inscris-toi à une compétition ou crée une salle." : 'Aucun match terminé pour le moment.'}</div>}
+          {groups.map(([label, ms]) => (
+            <div key={label}>
+              <div className="small muted" style={{ margin: '10px 0 6px', textTransform: 'capitalize' }}>{label}</div>
+              <div className="stack">
+                {ms.map((m: any) => {
+                  const opp = m.player_a === me.id ? m.player_b : m.player_a
+                  const comp = data?.compOf[m.competition_id]
+                  return (
+                    <button key={m.id} className="item" onClick={() => nav.go('match', { id: m.id })}>
+                      {comp?.image_url ? <div style={{ width: 48, height: 48, borderRadius: 10, background: `center/cover url(${comp.image_url})`, flex: 'none' }} /> : <GameArt size={48} />}
+                      <div className="grow">
+                        <b>{comp?.name || 'Compétition'}</b>
+                        <div className="small muted">vs {data?.names[opp] || 'à déterminer'}{m.scheduled_at ? ` · ${hhmm(m.scheduled_at)}` : ''}{tab === 'up' && m.scheduled_at ? ` · ${leftTxt(m.scheduled_at)}` : ''}</div>
+                      </div>
+                      {m.winner_id
+                        ? <span className={'badge ' + (m.winner_id === me.id ? 'b-ok' : 'b-wait')}>{m.winner_id === me.id ? 'Victoire' : 'Défaite'}{!m.forfeit ? ` ${m.score_a}-${m.score_b}` : ' (forfait)'}</span>
+                        : <span className="badge b-gold">À jouer</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </section>

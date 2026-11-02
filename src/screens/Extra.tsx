@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { sb } from '../lib/supabase'
-import { useApp, useLoad, q, rpc, Top, Spin, ErrBox, errMsg, Av } from '../lib/ui'
+import { useApp, useLoad, q, rpc, Top, Spin, ErrBox, errMsg, Av, STATUS, FORMATS, GameArt } from '../lib/ui'
 import { COUNTRIES } from './Auth'
 
 /* ---------- Mot de passe oublié (code à 6 chiffres) ---------- */
@@ -285,6 +285,69 @@ export function Legal({ k }: { k: string }) {
         <div className="card small muted">Version pilote. Ces textes seront revus et complétés avant l'ouverture au public.</div>
         {secs.map(([h, t]) => <div key={h} className="card stack"><b>{h}</b><div className="small muted">{t}</div></div>)}
       </div>
+    </section>
+  )
+}
+
+/* ---------- Page publique d'un organisateur ---------- */
+export function OrgPage({ id }: { id: string }) {
+  const { me, nav } = useApp()
+  const { data, loading } = useLoad(async () => {
+    const p = await q<any>(sb.from('profiles').select('id,username,avatar_url,bio,country,created_at').eq('id', id).single())
+    const [org, comps] = await Promise.all([
+      rpc('organizer_stats', { _uid: id }).catch(() => null),
+      q<any[]>(sb.from('competitions').select('id,name,status,start_at,max_players,format,image_url,registrations(count)').eq('organizer_id', id).order('start_at', { ascending: false }).limit(30)),
+    ])
+    return { p, org: (org as any)?.[0] || org, comps }
+  }, [id])
+  if (loading && !data) return <section className="screen"><Top title="Organisateur" /><Spin /></section>
+  if (!data) return <section className="screen"><Top title="Organisateur" /><div className="card small">Profil introuvable.</div></section>
+  const { p, org, comps } = data
+  const flag = COUNTRIES.find((c) => c.n === p.country)?.f
+  const upcoming = comps.filter((c: any) => ['open', 'closed', 'ongoing'].includes(c.status))
+  const past = comps.filter((c: any) => ['finished', 'cancelled'].includes(c.status))
+  return (
+    <section className="screen">
+      <Top title="Organisateur" />
+      <div className="row" style={{ marginBottom: 14 }}>
+        <Av name={p.username} size={70} url={p.avatar_url} />
+        <div className="grow"><h2>{p.username}</h2><div className="small muted">{flag} {p.country || ''} · Organisateur Arena</div></div>
+      </div>
+      {p.bio && <div className="card small" style={{ marginBottom: 10 }}>{p.bio}</div>}
+      <div className="card" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)' }}>
+        <div className="stat"><b>{org?.organized ?? 0}</b><span className="small muted">Organisées</span></div>
+        <div className="stat"><b>{org?.finished ?? 0}</b><span className="small muted">Terminées</span></div>
+        <div className="stat"><b>{org?.reliability_pct != null ? org.reliability_pct + ' %' : '–'}</b><span className="small muted">Fiabilité</span></div>
+      </div>
+      {!!upcoming.length && (
+        <>
+          <div className="sec" style={{ margin: '14px 0 8px' }}><h3>À venir et en cours</h3></div>
+          <div className="stack">
+            {upcoming.map((c: any) => (
+              <button key={c.id} className="item" onClick={() => nav.go('cdetail', { id: c.id })}>
+                {c.image_url ? <div style={{ width: 48, height: 48, borderRadius: 10, background: `center/cover url(${c.image_url})`, flex: 'none' }} /> : <GameArt size={48} />}
+                <div className="grow"><b>{c.name}</b><div className="small muted">{FORMATS[c.format]} · {c.registrations?.[0]?.count || 0}/{c.max_players} inscrits</div></div>
+                <span className={'badge ' + STATUS[c.status][1]}>{STATUS[c.status][0]}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {!!past.length && (
+        <>
+          <div className="sec" style={{ margin: '14px 0 8px' }}><h3>Historique</h3></div>
+          <div className="stack">
+            {past.map((c: any) => (
+              <button key={c.id} className="item" onClick={() => nav.go('cdetail', { id: c.id })}>
+                {c.image_url ? <div style={{ width: 48, height: 48, borderRadius: 10, background: `center/cover url(${c.image_url})`, flex: 'none' }} /> : <GameArt size={48} />}
+                <div className="grow"><b>{c.name}</b></div>
+                <span className={'badge ' + STATUS[c.status][1]}>{STATUS[c.status][0]}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {!upcoming.length && !past.length && <div className="card small muted">Aucune compétition organisée pour le moment.</div>}
     </section>
   )
 }

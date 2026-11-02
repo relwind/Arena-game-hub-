@@ -10,7 +10,7 @@ import { Me, Notifs, Organizer } from './screens/Me'
 import { Play, RoomCreate, RoomJoin, Room, RoomPlay } from './screens/Play'
 import { Search, Rules } from './screens/Search'
 import { Admin } from './screens/Admin'
-import { Forgot, Settings, PublicProfile, Help, Legal } from './screens/Extra'
+import { Forgot, Settings, PublicProfile, Help, Legal, OrgPage } from './screens/Extra'
 import { Messages, Conv } from './screens/Messages'
 import { CompManage } from './screens/Manage'
 import { Live } from './screens/Live'
@@ -26,7 +26,7 @@ const TAB_NAMES = TABS.map((t) => t.name)
 const SECTION: Record<string, string> = {
   rcreate: 'play', rjoin: 'play', room: 'play', rplay: 'play',
   cdetail: 'comps', cmanage: 'comps', ccreate: 'comps', mycomps: 'comps', match: 'comps', mymatches: 'comps',
-  notifs: 'me', settings: 'me', help: 'me', legal: 'me', pprof: 'home', messages: 'home', conv: 'home', organizer: 'me', admin: 'me', search: 'home', rules: 'home',
+  notifs: 'me', settings: 'me', help: 'me', legal: 'me', pprof: 'home', orgpage: 'comps', messages: 'home', conv: 'home', organizer: 'me', admin: 'me', search: 'home', rules: 'home',
 }
 
 export default function App() {
@@ -136,6 +136,7 @@ export default function App() {
       case 'admin': view = <Admin />; break
       case 'settings': view = <Settings />; break
       case 'pprof': view = <PublicProfile id={cur.p.id} />; break
+      case 'orgpage': view = <OrgPage id={cur.p.id} />; break
       case 'help': view = <Help />; break
       case 'legal': view = <Legal k={cur.p?.k} />; break
       case 'messages': view = <Messages />; break

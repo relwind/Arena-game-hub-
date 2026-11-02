@@ -66,7 +66,7 @@ export function Comps() {
           {list.map((c: any) => (
             <button key={c.id} className="item" onClick={() => nav.go('cdetail', { id: c.id })}>
               {c.image_url ? <div style={{ width: 54, height: 54, borderRadius: 12, background: `center/cover url(${c.image_url})`, flex: 'none' }} /> : <GameArt size={54} />}
-              <div className="grow"><b>{c.name}</b><div className="small muted">{fmt(c.start_at)} · {c.n}/{c.max_players} inscrits</div></div>
+              <div className="grow"><div className="row" style={{ gap: 6 }}><b>{c.name}</b><CompIcons c={c} /></div><div className="small muted">{fmt(c.start_at)} · {c.n}/{c.max_players} inscrits</div></div>
               <div style={{ textAlign: 'right' }}>
                 <div className={'badge ' + (c.status === 'cancelled' ? 'b-wait' : c.joined ? 'b-ok' : 'b-gold')}>{c.status === 'cancelled' ? 'Annulé' : c.joined ? 'Inscrit' : 'Gratuit'}</div>
                 {c.prize && <div className="small muted" style={{ marginTop: 4 }}>Lot : {c.prize}</div>}
@@ -121,13 +121,30 @@ function Bracket({ matches, names, meId, onOpen }: { matches: any[]; names: Reco
   )
 }
 
-function Standings({ comp, group }: { comp: string; group: number | null }) {
+function HeadToHead({ meId, oppId, oppName }: { meId: string; oppId: string; oppName: string }) {
+  const { data } = useLoad(async () => {
+    const ms = await q<any[]>(sb.from('matches').select('winner_id,score_a,score_b,player_a,player_b').eq('bye', false).not('winner_id', 'is', null)
+      .or(`and(player_a.eq.${meId},player_b.eq.${oppId}),and(player_a.eq.${oppId},player_b.eq.${meId})`).order('decided_at', { ascending: false }).limit(20))
+    return ms
+  }, [meId, oppId], 30000)
+  if (!data) return null
+  if (!data.length) return <div className="small muted">Première confrontation entre vous.</div>
+  const w = data.filter((m: any) => m.winner_id === meId).length
+  return <div className="small muted">Face-à-face : {w} victoire{w > 1 ? 's' : ''} pour toi, {data.length - w} pour {oppName}, sur {data.length} match{data.length > 1 ? 's' : ''}.</div>
+}
+
+function Standings({ comp, group, meId }: { comp: string; group: number | null; meId?: string }) {
   const { data } = useLoad(() => rpc('competition_standings', { _comp: comp, _group: group }), [comp, group], 20000)
   if (!data) return null
   return (
     <table className="tb">
-      <thead><tr><th>Joueur</th><th>J</th><th>V</th><th>+/-</th></tr></thead>
-      <tbody>{(data as any[]).map((r) => <tr key={r.user_id}><td>{r.username}</td><td>{r.played}</td><td>{r.wins}</td><td>{r.goal_diff}</td></tr>)}</tbody>
+      <thead><tr><th>#</th><th>Joueur</th><th>J</th><th>V</th><th>D</th><th>BP</th><th>BC</th><th>+/-</th><th>Pts</th></tr></thead>
+      <tbody>{(data as any[]).map((r, i) => (
+        <tr key={r.user_id} style={r.user_id === meId ? { color: 'var(--gold)' } : undefined}>
+          <td>{i + 1}</td><td>{r.username}</td><td>{r.played}</td><td>{r.wins}</td><td>{r.played - r.wins}</td>
+          <td>{r.goals_for}</td><td>{r.goals_against}</td><td>{r.goal_diff > 0 ? '+' : ''}{r.goal_diff}</td><td><b>{r.wins * 3}</b></td>
+        </tr>
+      ))}</tbody>
     </table>
   )
 }
@@ -144,6 +161,20 @@ const countdown = (d: string) => {
   return j ? `${j} j ${h} h` : h ? `${h} h ${mm} min` : `${mm} min`
 }
 const ROUND_NAMES = (n: number, i: number) => (i === n - 1 ? 'Finale' : i === n - 2 ? 'Demi-finales' : i === n - 3 ? 'Quarts de finale' : `Tour ${i + 1}`)
+
+const FORMAT_ICON: Record<string, string> = { elim: 'M6 4h5v4l-3 3 3 3v4H6v-4l3-3-3-3zM13 4h5v4l-3 3 3 3v4h-5v-4l3-3-3-3z', rr: 'M12 4a8 8 0 100 16 8 8 0 000-16zM12 8v4l3 2', poules: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z' }
+function FormatIcon({ format, size = 15 }: { format: string; size?: number }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} style={{ flex: 'none' }} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={FORMAT_ICON[format] || FORMAT_ICON.elim} /></svg>
+}
+function CompIcons({ c }: { c: any }) {
+  return (
+    <span className="row" style={{ gap: 5, display: 'inline-flex', color: 'var(--muted)' }}>
+      <span title={FORMATS[c.format]}><FormatIcon format={c.format} /></span>
+      {c.prize && <span title={'Lot : ' + c.prize} style={{ color: 'var(--gold)' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4h10v5a5 5 0 01-10 0zM7 6H4v2a3 3 0 003 3M17 6h3v2a3 3 0 01-3 3M12 14v4M8 20h8" /></svg></span>}
+      {c.mandatory_live && <span title="Live obligatoire" style={{ color: 'var(--live)' }}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M7.8 7.8a6 6 0 000 8.4M16.2 7.8a6 6 0 010 8.4" /></svg></span>}
+    </span>
+  )
+}
 
 export function CompCover({ small, img }: { small?: boolean; img?: string | null }) {
   return (
@@ -204,7 +235,7 @@ export function CompDetail({ id }: { id: string }) {
       <div className="card row">
         {c.image_url ? <div style={{ width: 54, height: 54, borderRadius: 12, background: `center/cover url(${c.image_url})`, flex: 'none' }} /> : <GameArt size={54} />}
         <div className="grow">
-          <h3>{c.name}</h3>
+          <div className="row" style={{ gap: 6 }}><h3>{c.name}</h3><CompIcons c={c} /></div>
           <div className="small muted">{fmt(c.start_at)} · {nReg}/{c.max_players} inscrits</div>
         </div>
         {['finished', 'cancelled'].includes(c.status) && <span className={'badge ' + STATUS[c.status][1]}>{STATUS[c.status][0]}</span>}
@@ -217,7 +248,7 @@ export function CompDetail({ id }: { id: string }) {
       {c.status === 'cancelled' && <div className="card mt small">Annulée : {c.cancel_reason}</div>}
       {['open', 'closed'].includes(c.status) && <div className="card small mt">{cd ? `Début dans ${cd}` : 'Compétition à démarrer par l’organisateur'}</div>}
       {c.status === 'ongoing' && <div className="card small mt">Compétition commencée</div>}
-      <div className="card small mt" style={{ textAlign: 'center' }}>Organisateur : <b>{names[c.organizer_id] || 'Organisateur'}</b></div>
+      <button className="card small mt" style={{ textAlign: 'center', width: '100%' }} onClick={() => nav.go('orgpage', { id: c.organizer_id })}>Organisateur : <b>{names[c.organizer_id] || 'Organisateur'}</b> · voir sa page</button>
 
       <div className="seg" style={{ margin: '14px 0' }}>
         {[['info', 'Info'], ['part', 'Participants'], ['rule', 'Règlement']].map(([k, l]) => (
@@ -250,6 +281,7 @@ export function CompDetail({ id }: { id: string }) {
                 <div className="card stack" style={{ borderColor: 'var(--gold)' }}>
                   <b style={{ color: 'var(--gold)' }}>Prochain match : {roundLabel(myNext)}</b>
                   <div className="small muted">Contre {oppOf(myNext)} · {fmt(myNext.scheduled_at)}</div>
+                  {(() => { const o = myNext.player_a === me.id ? myNext.player_b : myNext.player_a; return o ? <HeadToHead meId={me.id} oppId={o} oppName={names[o] || 'ton adversaire'} /> : null })()}
                   <button className="btn" onClick={() => nav.go('match', { id: myNext.id })}>Entrer dans la salle du match</button>
                   <button className="btn ghost" onClick={() => nav.go('match', { id: myNext.id })}>Envoyer mon résultat</button>
                 </div>
@@ -279,8 +311,8 @@ export function CompDetail({ id }: { id: string }) {
         <div className="card">
           {ms.length ? (
             <div className="stack">
-              {(c.phase === 'rr') && <Standings comp={id} group={null} />}
-              {groups.map((g) => <div key={g}><div className="small muted" style={{ marginBottom: 4 }}>Poule {String.fromCharCode(65 + g)}</div><Standings comp={id} group={g} /></div>)}
+              {(c.phase === 'rr') && <Standings comp={id} group={null} meId={me.id} />}
+              {groups.map((g) => <div key={g}><div className="small muted" style={{ marginBottom: 4 }}>Poule {String.fromCharCode(65 + g)}</div><Standings comp={id} group={g} meId={me.id} /></div>)}
               <Bracket matches={ms} names={names} meId={me.id} onOpen={(mid) => nav.go('match', { id: mid })} />
             </div>
           ) : <div className="small muted">Le tirage n'a pas encore eu lieu.</div>}
