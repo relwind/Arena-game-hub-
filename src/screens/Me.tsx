@@ -80,6 +80,8 @@ export function Me() {
         <button onClick={() => nav.go('mymatches')}>Mes matchs <span>›</span></button>
         <button onClick={() => nav.go('notifs')}>Notifications <span>›</span></button>
         <button onClick={() => nav.go('organizer')}>{isOrg ? 'Espace organisateur' : 'Devenir organisateur'} <span>›</span></button>
+        <button onClick={() => nav.go('settings')}>Paramètres <span>›</span></button>
+        <button onClick={() => nav.go('help')}>Aide et support <span>›</span></button>
         {me.roles.includes('admin') && <button onClick={() => nav.go('admin')}>Panel administrateur <span>›</span></button>}
         <button onClick={() => sb.auth.signOut()}>Se déconnecter <span>›</span></button>
       </div>

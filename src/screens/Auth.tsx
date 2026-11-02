@@ -33,12 +33,6 @@ export function Login() {
     setBusy(false)
     if (error) setErr(errMsg(error))
   }
-  const forgot = async () => {
-    if (!email.trim()) return setErr("Entre d'abord ton email.")
-    const { error } = await sb.auth.resetPasswordForEmail(email.trim())
-    setErr(error ? errMsg(error) : 'Un email de réinitialisation vient de partir.')
-  }
-
   return (
     <section className="screen">
       <div className="top"><h2>Bienvenue sur Arena !</h2></div>
@@ -49,7 +43,7 @@ export function Login() {
         <ErrBox text={err} />
         <button className="btn" type="submit" disabled={busy}>{busy ? 'Connexion…' : 'Connexion'}</button>
         <button className="btn ghost" type="button" onClick={() => nav.go('signup')}>Créer un compte</button>
-        <button type="button" className="small" onClick={forgot} style={{ background: 'none', border: 0, color: 'var(--cyan)' }}>Mot de passe oublié ?</button>
+        <button type="button" className="small" onClick={() => nav.go('forgot')} style={{ background: 'none', border: 0, color: 'var(--cyan)' }}>Mot de passe oublié ?</button>
       </form>
     </section>
   )

@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useApp, useLoad, rpc, Top, ErrBox, errMsg, Av } from '../lib/ui'
 
 export function Search() {
-  const { me, toast } = useApp()
+  const { me, toast, nav } = useApp()
   const [term, setTerm] = useState('')
   const [res, setRes] = useState<any[] | null>(null)
   const [err, setErr] = useState('')
@@ -29,8 +29,7 @@ export function Search() {
           {!res.length && <div className="card small muted">Aucun joueur trouvé.</div>}
           {res.map((r: any) => (
             <div key={r.user_id} className="item" style={{ cursor: 'default' }}>
-              <Av name={r.username} size={44} />
-              <div className="grow"><b>{r.username}</b></div>
+              <button style={{ background: 'none', border: 0, display: 'flex', alignItems: 'center', gap: 12, flex: 1, textAlign: 'left', color: 'inherit' }} onClick={() => nav.go('pprof', { id: r.user_id })}><Av name={r.username} size={44} /><b>{r.username}</b></button>
               {r.relation === 'none' && <button className="badge b-ok" style={{ border: 0 }} onClick={() => act(() => rpc('request_friend', { _other: r.user_id }), 'Demande envoyée')}>Ajouter</button>}
               {r.relation === 'sent' && <span className="badge b-wait">Envoyée</span>}
               {r.relation === 'friend' && <span className="badge b-ok">Ami</span>}
@@ -56,7 +55,7 @@ export function Search() {
       <div className="sec"><h3>Mes amis</h3></div>
       <div className="stack">
         {!acc.length && <div className="card small muted">Aucun ami pour le moment.</div>}
-        {acc.map((f: any) => <div key={f.user_id} className="item" style={{ cursor: 'default' }}><Av name={f.username} size={44} /><div className="grow"><b>{f.username}</b></div></div>)}
+        {acc.map((f: any) => <button key={f.user_id} className="item" onClick={() => nav.go('pprof', { id: f.user_id })}><Av name={f.username} size={44} /><div className="grow"><b>{f.username}</b></div><span className="muted">›</span></button>)}
       </div>
     </section>
   )

@@ -15,16 +15,17 @@ export function Admin() {
   const [why, setWhy] = useState('')
 
   const { data, loading, reload } = useLoad(async () => {
-    const [req, rep, codes, sus, log, bc] = await Promise.all([
+    const [req, rep, codes, sus, log, bc, sup] = await Promise.all([
       q<any[]>(sb.from('organizer_requests').select('id,user_id,message,status,created_at').eq('status', 'pending').order('created_at')),
       q<any[]>(sb.from('reports').select('id,reporter_id,reported_id,reason,context,status,created_at').eq('status', 'open').order('created_at').limit(50)),
       q<any[]>(sb.from('organizer_codes').select('code,used_by,expires_at,created_at').order('created_at', { ascending: false }).limit(15)),
       q<any[]>(sb.from('organizer_suspensions').select('user_id,until,reason').order('created_at', { ascending: false }).limit(30)),
       q<any[]>(sb.from('admin_log').select('id,admin_id,action,target,created_at').order('created_at', { ascending: false }).limit(40)),
       q<any[]>(sb.from('broadcasts').select('id,title,body,created_at').order('created_at', { ascending: false }).limit(10)),
+      q<any[]>(sb.from('support_requests').select('id,user_id,subject,body,created_at').eq('status', 'open').order('created_at').limit(50)),
     ])
-    const names = await namesOf([...req.map((r) => r.user_id), ...rep.flatMap((r) => [r.reporter_id, r.reported_id]), ...sus.map((s) => s.user_id), ...log.map((l) => l.admin_id)])
-    return { req, rep, codes, sus, log, bc, names }
+    const names = await namesOf([...req.map((r) => r.user_id), ...rep.flatMap((r) => [r.reporter_id, r.reported_id]), ...sus.map((s) => s.user_id), ...log.map((l) => l.admin_id), ...sup.map((x) => x.user_id)])
+    return { req, rep, codes, sus, log, bc, sup, names }
   }, [me.id], 20000)
 
   const act = async (fn: () => Promise<any>, ok: string) => {
@@ -60,7 +61,7 @@ export function Admin() {
     <section className="screen">
       <Top title="Panel administrateur" />
       <div className="seg wrap" style={{ marginBottom: 14 }}>
-        {[['req', `Demandes${data?.req.length ? ' ' + data.req.length : ''}`], ['rep', `Signalements${data?.rep.length ? ' ' + data.rep.length : ''}`], ['org', 'Organisateurs'], ['bc', 'Annonces'], ['log', 'Journal']].map(([k, l]) => (
+        {[['req', `Demandes${data?.req.length ? ' ' + data.req.length : ''}`], ['rep', `Signalements${data?.rep.length ? ' ' + data.rep.length : ''}`], ['sup', `Support${data?.sup.length ? ' ' + data.sup.length : ''}`], ['org', 'Organisateurs'], ['bc', 'Annonces'], ['log', 'Journal']].map(([k, l]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -84,6 +85,14 @@ export function Admin() {
               <div className="small">Motif : {r.reason}</div>
               {r.context && <div className="small muted">{r.context}</div>}
               <button className="btn ghost" onClick={() => act(async () => ck(await sb.from('reports').update({ status: 'handled', handled_by: me.id }).eq('id', r.id)), 'Signalement traité')}>Marquer comme traité</button>
+            </div>
+          )))}
+
+          {tab === 'sup' && (!data.sup.length ? <Empty t="Aucun message de support." /> : data.sup.map((x) => (
+            <div key={x.id} className="card stack">
+              <div className="small"><b>{nm(x.user_id)}</b> · <span className="muted">{fmt(x.created_at)}</span></div>
+              <b>{x.subject}</b><div className="small">{x.body}</div>
+              <button className="btn ghost" onClick={() => act(async () => ck(await sb.from('support_requests').update({ status: 'done', handled_by: me.id }).eq('id', x.id)), 'Message traité')}>Marquer comme traité</button>
             </div>
           )))}
 

@@ -267,11 +267,11 @@ export function CompDetail({ id }: { id: string }) {
         <div className="card stack small">
           {!active.length && <div className="muted">Aucun inscrit pour le moment.</div>}
           {active.map((r: any) => (
-            <div key={r.user_id} className="row"><Av name={names[r.user_id]} size={32} /><span className="grow">{names[r.user_id]}{r.user_id === me.id ? ' (toi)' : ''}</span>
+            <button key={r.user_id} className="row" style={{ background: 'none', border: 0, color: 'inherit', textAlign: 'left' }} onClick={() => nav.go('pprof', { id: r.user_id })}><Av name={names[r.user_id]} size={32} /><span className="grow">{names[r.user_id]}{r.user_id === me.id ? ' (toi)' : ''}</span>
               {r.status === 'waitlist' && <span className="badge b-wait">Attente</span>}
               {r.status === 'eliminated' && <span className="badge b-wait">Éliminé</span>}
               {r.checked_in_at && <span className="badge b-ok">Présent</span>}
-            </div>
+            </button>
           ))}
         </div>
       )}

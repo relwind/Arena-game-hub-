@@ -10,6 +10,7 @@ import { Me, Notifs, Organizer } from './screens/Me'
 import { Play, RoomCreate, RoomJoin, Room, RoomPlay } from './screens/Play'
 import { Search, Rules } from './screens/Search'
 import { Admin } from './screens/Admin'
+import { Forgot, Settings, PublicProfile, Help, Legal } from './screens/Extra'
 import { Messages, Conv } from './screens/Messages'
 import { CompManage } from './screens/Manage'
 import { Live } from './screens/Live'
@@ -25,7 +26,7 @@ const TAB_NAMES = TABS.map((t) => t.name)
 const SECTION: Record<string, string> = {
   rcreate: 'play', rjoin: 'play', room: 'play', rplay: 'play',
   cdetail: 'comps', cmanage: 'comps', ccreate: 'comps', mycomps: 'comps', match: 'comps', mymatches: 'comps',
-  notifs: 'me', messages: 'home', conv: 'home', organizer: 'me', admin: 'me', search: 'home', rules: 'home',
+  notifs: 'me', settings: 'me', help: 'me', legal: 'me', pprof: 'home', messages: 'home', conv: 'home', organizer: 'me', admin: 'me', search: 'home', rules: 'home',
 }
 
 export default function App() {
@@ -109,7 +110,7 @@ export default function App() {
   let view: React.ReactNode
   const key = stack.length + cur.name + JSON.stringify(cur.p || {})
   if (!session) {
-    view = cur.name === 'login' ? <Login /> : cur.name === 'signup' ? <Signup /> : cur.name === 'verify' ? <Verify p={cur.p} /> : <Splash />
+    view = cur.name === 'login' ? <Login /> : cur.name === 'forgot' ? <Forgot /> : cur.name === 'signup' ? <Signup /> : cur.name === 'verify' ? <Verify p={cur.p} /> : <Splash />
   } else if (!me) {
     view = <Spin />
   } else if (!me.onboarded && !['onb3', 'onb4', 'valid'].includes(cur.name)) {
@@ -133,6 +134,10 @@ export default function App() {
       case 'rplay': view = <RoomPlay id={cur.p.id} />; break
       case 'search': view = <Search />; break
       case 'admin': view = <Admin />; break
+      case 'settings': view = <Settings />; break
+      case 'pprof': view = <PublicProfile id={cur.p.id} />; break
+      case 'help': view = <Help />; break
+      case 'legal': view = <Legal k={cur.p?.k} />; break
       case 'messages': view = <Messages />; break
       case 'conv': view = <Conv id={cur.p.id} name={cur.p.name} />; break
       case 'cmanage': view = <CompManage id={cur.p.id} />; break
