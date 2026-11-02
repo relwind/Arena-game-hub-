@@ -11,6 +11,7 @@ export function MatchRoom({ id }: { id: string }) {
   const [code, setCode] = useState('')
   const [msg, setMsg] = useState('')
   const [dispute, setDispute] = useState<string | null>(null)
+  const [forf, setForf] = useState(false)
   const chatEnd = useRef<HTMLDivElement>(null)
 
   const { data, loading, reload } = useLoad(async () => {
@@ -81,6 +82,20 @@ export function MatchRoom({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      {player && !decided && m.player_a && m.player_b && (
+        <div className="mt">
+          {!forf ? <button className="btn ghost" style={{ color: 'var(--live)' }} onClick={() => setForf(true)}>Déclarer forfait pour ce match</button> : (
+            <div className="card stack" style={{ borderColor: 'var(--live)' }}>
+              <b>Déclarer forfait ?</b>
+              <div className="small muted">Ton adversaire gagne le match. Cette action est définitive et compte comme un abandon dans ta réputation.</div>
+              <div className="row"><button className="btn ghost" onClick={() => setForf(false)}>Retour</button>
+                <button className="btn" style={{ background: 'var(--live)' }} disabled={busy} onClick={() => act(async () => { await rpc('forfeit_match', { _match: id }); setForf(false) }, 'Forfait enregistré')}>Confirmer</button></div>
+            </div>
+          )}
+          <div className="small muted" style={{ marginTop: 6 }}>Si tu ne peux pas jouer, préviens ton adversaire : il gagne le match.</div>
+        </div>
+      )}
 
       {decided && (
         <div className="card mt" style={{ borderColor: 'var(--ok)' }}>
