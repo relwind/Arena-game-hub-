@@ -165,3 +165,38 @@ export function AvatarPicker({ name, url, size = 84, onDone }: { name?: string; 
     </div>
   )
 }
+
+// Capture d'écran d'un score : stockée dans un espace privé (joueurs du match, organisateurs et admins seulement).
+export async function uploadProof(matchId: string, uid: string, file: File): Promise<string> {
+  const blob = await shrink(file, 1280, 1280, false)
+  const path = `${matchId}/${uid}-${Date.now()}.jpg`
+  const { error } = await sb.storage.from('proofs').upload(path, blob, { contentType: 'image/jpeg' })
+  if (error) throw new Error(/size|exceed/i.test(error.message) ? 'Image trop lourde.' : errMsg(error))
+  return path
+}
+
+export function ProofLink({ path, label = 'Voir la capture' }: { path?: string | null; label?: string }) {
+  const [url, setUrl] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  if (!path) return null
+  const open = async () => {
+    setBusy(true); setErr('')
+    const { data, error } = await sb.storage.from('proofs').createSignedUrl(path, 600)
+    setBusy(false)
+    if (error || !data) return setErr('Capture introuvable.')
+    setUrl(data.signedUrl)
+  }
+  return (
+    <>
+      <button type="button" className="chip" disabled={busy} onClick={open}>{busy ? '…' : label}</button>
+      {err && <span className="small" style={{ color: 'var(--live)' }}>{err}</span>}
+      {url && (
+        <div onClick={() => setUrl('')} style={{ position: 'fixed', inset: 0, background: '#000e', zIndex: 90, display: 'grid', placeItems: 'center', padding: 12 }}>
+          <img src={url} alt="Capture d'écran du score" style={{ maxWidth: '100%', maxHeight: '88vh', borderRadius: 10 }} />
+          <div className="small" style={{ position: 'absolute', bottom: 24, color: '#fff' }}>Touche pour fermer</div>
+        </div>
+      )}
+    </>
+  )
+}

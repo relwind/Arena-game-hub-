@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { sb } from '../lib/supabase'
+import { uploadProof, ProofLink } from '../lib/img'
 import { useApp, useLoad, q, rpc, fmt, hhmm, Top, Spin, ErrBox, errMsg, namesOf } from '../lib/ui'
 
 export function MatchRoom({ id }: { id: string }) {
@@ -12,13 +13,14 @@ export function MatchRoom({ id }: { id: string }) {
   const [msg, setMsg] = useState('')
   const [dispute, setDispute] = useState<string | null>(null)
   const [forf, setForf] = useState(false)
+  const [cap, setCap] = useState<File | null>(null)
   const chatEnd = useRef<HTMLDivElement>(null)
 
   const { data, loading, reload } = useLoad(async () => {
     const m = await q<any>(sb.from('matches').select('*').eq('id', id).single())
     const [comp, results, msgs, room, disp, ident] = await Promise.all([
       q<any>(sb.from('competitions').select('id,name,match_preset,organizer_id,status').eq('id', m.competition_id).single()),
-      q<any[]>(sb.from('match_results').select('user_id,score_a,score_b').eq('match_id', id)),
+      q<any[]>(sb.from('match_results').select('user_id,score_a,score_b,proof_url').eq('match_id', id)),
       q<any[]>(sb.from('match_messages').select('id,user_id,kind,body,created_at').eq('match_id', id).order('created_at').limit(200)),
       q<any>(sb.from('match_room').select('room_code').eq('match_id', id).maybeSingle()),
       q<any[]>(sb.from('disputes').select('id,status,reason,opened_by').eq('match_id', id)),
@@ -61,7 +63,11 @@ export function MatchRoom({ id }: { id: string }) {
     const a = Number(sa), b = Number(sb_)
     if (sa === '' || sb_ === '' || !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) return setErr('Entre les deux scores.')
     if (a === b) return setErr("Égalité impossible : indique le score final (prolongation ou tirs au but).")
-    act(() => rpc('submit_result', { _match: id, _sa: a, _sb: b }), 'Score envoyé')
+    act(async () => {
+      const proof = cap ? await uploadProof(id, me.id, cap) : null
+      await rpc('submit_result', { _match: id, _sa: a, _sb: b, _proof: proof })
+      setCap(null)
+    }, 'Score envoyé')
   }
 
   return (
@@ -159,7 +165,7 @@ export function MatchRoom({ id }: { id: string }) {
         <div className="card stack mt">
           <b>Score final</b>
           {myResult ? (
-            <div className="small">Ton score envoyé : {A} {myResult.score_a} – {myResult.score_b} {B}.{' '}
+            <div className="small">Ton score envoyé : {A} {myResult.score_a} – {myResult.score_b} {B}. {myResult.proof_url && <ProofLink path={myResult.proof_url} label="Ma capture" />}{' '}
               {oppResult ? "Les scores ne correspondent pas : l'organisateur va trancher." : "En attente de l'adversaire (validation automatique après 15 minutes)."}</div>
           ) : (
             <>
@@ -167,6 +173,11 @@ export function MatchRoom({ id }: { id: string }) {
                 <label className="f grow">{A}<input className="in" type="number" inputMode="numeric" min={0} value={sa} onChange={(e) => setSa(e.target.value)} /></label>
                 <label className="f grow">{B}<input className="in" type="number" inputMode="numeric" min={0} value={sb_} onChange={(e) => setSb(e.target.value)} /></label>
               </div>
+              <label className="btn ghost" style={{ textAlign: 'center', cursor: 'pointer' }}>
+                {cap ? 'Capture ajoutée : ' + cap.name.slice(0, 22) : "Ajouter la capture d'écran du score final"}
+                <input type="file" accept="image/*" hidden onChange={(e) => setCap(e.target.files?.[0] || null)} />
+              </label>
+              <div className="small muted">Envoie le score affiché par le jeu et, si possible, une capture : elle aide l'organisateur en cas de désaccord. Les deux scores identiques valident le match automatiquement.</div>
               <button className="btn" disabled={busy} onClick={submitScore}>Envoyer le score</button>
             </>
           )}
@@ -180,7 +191,8 @@ export function MatchRoom({ id }: { id: string }) {
       {isStaff && !player && !decided && m.player_a && m.player_b && (
         <div className="card stack mt" style={{ borderColor: 'var(--gold)' }}>
           <b>Organisation</b>
-          {results.map((r: any) => <div key={r.user_id} className="small">Score de {names[r.user_id] || 'joueur'} : {r.score_a} – {r.score_b}</div>)}
+          {!results.length && <div className="small muted">Aucun score envoyé pour le moment.</div>}
+          {results.map((r: any) => <div key={r.user_id} className="row small" style={{ flexWrap: 'wrap' }}><span>Score de {names[r.user_id] || 'joueur'} : {r.score_a} – {r.score_b}</span>{r.proof_url ? <ProofLink path={r.proof_url} /> : <span className="muted">(pas de capture)</span>}</div>)}
           <div className="row">
             <label className="f grow">{A}<input className="in" type="number" inputMode="numeric" value={sa} onChange={(e) => setSa(e.target.value)} /></label>
             <label className="f grow">{B}<input className="in" type="number" inputMode="numeric" value={sb_} onChange={(e) => setSb(e.target.value)} /></label>
@@ -192,6 +204,7 @@ export function MatchRoom({ id }: { id: string }) {
       {isStaff && openDispute && (
         <div className="card stack mt" style={{ borderColor: 'var(--gold)' }}>
           <b>Contestation</b>
+          {results.map((r: any) => <div key={r.user_id} className="row small" style={{ flexWrap: 'wrap' }}><span>Score de {names[r.user_id] || 'joueur'} : {r.score_a} – {r.score_b}</span>{r.proof_url ? <ProofLink path={r.proof_url} /> : <span className="muted">(pas de capture)</span>}</div>)}
           <div className="row">
             <label className="f grow">{A}<input className="in" type="number" inputMode="numeric" value={sa} onChange={(e) => setSa(e.target.value)} /></label>
             <label className="f grow">{B}<input className="in" type="number" inputMode="numeric" value={sb_} onChange={(e) => setSb(e.target.value)} /></label>

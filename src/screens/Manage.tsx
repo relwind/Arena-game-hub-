@@ -188,6 +188,7 @@ export function CompManage({ id }: { id: string }) {
             <div key={m.id} className="card stack">
               <div className="row small"><span className="muted grow">{m.phase === 'groups' ? 'Poule' : m.phase === 'rr' ? 'Championnat' : `Tour ${m.round_index + 1}`} · {fmt(m.scheduled_at)}</span></div>
               <div className="row"><b className="grow">{nm(m.player_a)} – {nm(m.player_b)}</b>{m.winner_id && <span className="badge b-ok">{m.score_a}–{m.score_b}</span>}</div>
+              {m.player_a && m.player_b && <button className="small" style={{ background: 'none', border: 0, color: 'var(--cyan)', textAlign: 'left', padding: 0 }} onClick={() => nav.go('match', { id: m.id })}>Voir le dossier du match (scores, captures, messages) ›</button>}
               {!m.winner_id && m.player_a && m.player_b && (
                 <div className="row">
                   <input className="in" inputMode="numeric" placeholder="A" style={{ width: 64 }} value={sc[m.id]?.[0] ?? ''} onChange={(e) => setSc({ ...sc, [m.id]: [e.target.value, sc[m.id]?.[1] ?? ''] })} />
@@ -210,6 +211,7 @@ export function CompManage({ id }: { id: string }) {
               <div key={d.id} className="card stack">
                 <div className="row"><b className="grow">{m ? `${nm(m.player_a)} – ${nm(m.player_b)}` : 'Match'}</b><span className={'badge ' + (d.status === 'open' ? 'b-gold' : 'b-wait')}>{d.status === 'open' ? 'À traiter' : 'Réglé'}</span></div>
                 <div className="small">{d.reason}</div>
+                <button className="small" style={{ background: 'none', border: 0, color: 'var(--cyan)', textAlign: 'left', padding: 0 }} onClick={() => nav.go('match', { id: d.match_id })}>Voir les scores, captures et messages ›</button>
                 {d.status === 'open' && (
                   <>
                     <div className="row"><input className="in" inputMode="numeric" placeholder="Score A" value={v[0]} onChange={(e) => setSc({ ...sc, ['d' + d.id]: [e.target.value, v[1]] })} />
