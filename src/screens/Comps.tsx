@@ -247,6 +247,11 @@ export function CompDetail({ id }: { id: string }) {
       )}
       {c.status === 'cancelled' && <div className="card mt small">Annulée : {c.cancel_reason}</div>}
       {['open', 'closed'].includes(c.status) && <div className="card small mt">{cd ? `Début dans ${cd}` : 'Compétition à démarrer par l’organisateur'}</div>}
+      {['open', 'closed', 'ongoing'].includes(c.status) && c.end_at && (
+        <div className="card small mt" style={{ borderColor: 'var(--gold)' }}>
+          Doit se terminer avant le {fmt(c.end_at)}. Passé ce délai, elle est annulée automatiquement si elle n'est pas finie.
+        </div>
+      )}
       {c.status === 'ongoing' && <div className="card small mt">Compétition commencée</div>}
       <button className="card small mt" style={{ textAlign: 'center', width: '100%' }} onClick={() => nav.go('orgpage', { id: c.organizer_id })}>Organisateur : <b>{names[c.organizer_id] || 'Organisateur'}</b> · voir sa page</button>
 
@@ -357,7 +362,7 @@ export function CompCreate() {
   const { nav, toast, me } = useApp()
   const tomorrow = new Date(Date.now() + 86400e3)
   const [tpl, setTpl] = useState('free')
-  const [f, setF] = useState<any>({ name: '', rules: '', date: toLocalDate(tomorrow), time: '20:00', close: '', max: 16, gap: 45, format: 'elim', preset: 's', live: true, prize: '', img: '' })
+  const [f, setF] = useState<any>({ name: '', rules: '', date: toLocalDate(tomorrow), time: '20:00', close: '', end: '', max: 16, gap: 45, format: 'elim', preset: 's', live: true, prize: '', img: '' })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
@@ -378,10 +383,16 @@ export function CompCreate() {
       if (cl.getTime() > start.getTime()) return setErr('La fin des inscriptions doit être avant le début.')
       close = cl.toISOString()
     }
+    let end: string | null = null
+    if (f.end) {
+      const ed = new Date(f.end + 'T23:59:00')
+      if (isNaN(ed.getTime()) || ed.getTime() <= start.getTime()) return setErr('La date de fin doit être après le début.')
+      end = ed.toISOString()
+    }
     setBusy(true)
     try {
       const row = await q<any>(sb.from('competitions').insert({
-        game_id: 'efb', organizer_id: me.id, name: f.name.trim(), rules: f.rules.trim() || null, start_at: start.toISOString(),
+        game_id: 'efb', organizer_id: me.id, name: f.name.trim(), rules: f.rules.trim() || null, start_at: start.toISOString(), end_at: end,
         registration_close_at: close, max_players: n, round_gap_minutes: gap, format: f.format, match_preset: f.preset, mandatory_live: f.live, prize: f.prize.trim() || null, image_url: f.img || null,
       }).select('id').single())
       toast('Compétition publiée')
@@ -406,6 +417,8 @@ export function CompCreate() {
         </div>
         <label className="f">Fin des inscriptions (optionnel)<input className="in" type="date" value={f.close} onChange={set('close')} />
           <span className="small muted">Si tu ne choisis rien, les inscriptions ferment 1 heure avant le début. Heure d'Ouagadougou.</span></label>
+        <label className="f">Date de fin de la compétition (optionnel)<input className="in" type="date" value={f.end} onChange={set('end')} />
+          <span className="small muted">Passé ce jour (23h59), Arena annule automatiquement la compétition si elle n'est pas terminée, et elle sort des listes de compétitions ouvertes ou en cours.</span></label>
         <label className="f">Nombre de places<input className="in" type="number" inputMode="numeric" value={f.max} onChange={set('max')} /></label>
         <label className="f">Écart entre deux tours (minutes)<input className="in" type="number" inputMode="numeric" value={f.gap} onChange={set('gap')} /></label>
         <div className="f"><span className="small muted">Réglages des matchs</span>
