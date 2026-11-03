@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "572742588617",
+    "project_id": "arena-game-hub",
+    "storage_bucket": "arena-game-hub.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:572742588617:android:d1be16c694fb6a9cfdd518",
+        "android_client_info": {
+          "package_name": "app.arena.gamehub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyACnJfGzy1Lyk7KflGQvUX-OL3gikv3v5k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

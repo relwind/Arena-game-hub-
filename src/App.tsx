@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { App as CapApp } from '@capacitor/app'
+import { startPush } from './lib/push'
 import { sb } from './lib/supabase'
 import { Ctx, Route, Spin, q } from './lib/ui'
 import { Splash, Login, Signup, Verify, OnbProfile, OnbPrefs, Valid } from './screens/Auth'
@@ -73,8 +74,10 @@ export default function App() {
   useEffect(() => {
     if (session === undefined) return
     if (session) {
-      loadMe(session.user.id).then(() =>
-        setStack((s) => (['splash', 'login', 'signup', 'verify'].includes(s[s.length - 1].name) ? [{ name: 'home' }] : s)))
+      loadMe(session.user.id).then(() => {
+        setStack((s) => (['splash', 'login', 'signup', 'verify'].includes(s[s.length - 1].name) ? [{ name: 'home' }] : s))
+        startPush(session.user.id)
+      })
     } else {
       setMe(null)
       setStack((s) => (['splash', 'login', 'signup', 'verify'].includes(s[s.length - 1].name) ? s : [{ name: 'splash' }]))

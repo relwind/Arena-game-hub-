@@ -39,11 +39,51 @@ const bars = `        <item name="android:statusBarColor">#070B16</item>
 styles = styles.replace(/(<style name="AppTheme\.NoActionBar"[^>]*>)/, '$1\n' + bars)
 fs.writeFileSync(stylesPath, styles)
 
+// --- Firebase / notifications push -----------------------------------------
+fs.copyFileSync('resources/android/google-services.json', 'android/app/google-services.json')
+
+const rootGradlePath = 'android/build.gradle'
+let rootGradle = fs.readFileSync(rootGradlePath, 'utf8')
+if (!rootGradle.includes('com.google.gms:google-services')) {
+  rootGradle = rootGradle.replace(
+    /dependencies\s*\{/,
+    `dependencies {
+        classpath 'com.google.gms:google-services:4.4.2'`
+  )
+  fs.writeFileSync(rootGradlePath, rootGradle)
+}
+
+const appGradlePath = 'android/app/build.gradle'
+let appGradle = fs.readFileSync(appGradlePath, 'utf8')
+if (!appGradle.includes('google-services')) {
+  appGradle += "\napply plugin: 'com.google.gms.google-services'\n"
+  fs.writeFileSync(appGradlePath, appGradle)
+}
+
 const manPath = 'android/app/src/main/AndroidManifest.xml'
 let man = fs.readFileSync(manPath, 'utf8')
 if (!man.includes('jp.konami.pesam')) {
   man = man.replace('<application', '<queries>\n        <package android:name="jp.konami.pesam" />\n    </queries>\n\n    <application')
-  fs.writeFileSync(manPath, man)
 }
+if (!man.includes('default_notification_icon')) {
+  man = man.replace(
+    '</application>',
+    `    <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_arena" />\n` +
+    `    <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/arena_icon_bg" />\n` +
+    `</application>`
+  )
+}
+fs.writeFileSync(manPath, man)
+
+// Canal de notification par défaut (Android 8+) et icône de notification monochrome.
+const notifDrawable = `<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path android:fillColor="#FF000000"
+        android:pathData="M12,2L2,21h20L12,2z M11,17h2v2h-2z M11,10h2v5h-2z" />
+</vector>
+`
+fs.mkdirSync(path.join(res, 'drawable'), { recursive: true })
+fs.writeFileSync(path.join(res, 'drawable/ic_stat_arena.xml'), notifDrawable)
 
 console.log('Identité Arena appliquée.')
