@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:background="@drawable/arena_panel_bg"
+    android:padding="12dp"
+    android:layout_width="260dp"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <TextView
+            android:id="@+id/arenaStatusTitle"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:textColor="#F5B83D"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:text="Salle du match" />
+        <TextView
+            android:id="@+id/arenaStatusClose"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:gravity="center"
+            android:textColor="#8A98BF"
+            android:textSize="16sp"
+            android:text="✕" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/arenaStatusBody"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="#E8EEFF"
+        android:textSize="12.5sp"
+        android:text="…" />
+
+    <EditText
+        android:id="@+id/arenaStatusInput"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/arena_input_bg"
+        android:textColor="#E8EEFF"
+        android:textColorHint="#8A98BF"
+        android:textSize="13sp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:hint="Code de la salle"
+        android:visibility="gone"
+        android:inputType="textCapCharacters" />
+
+    <TextView
+        android:id="@+id/arenaStatusSecondary"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/arena_ghost_btn_bg"
+        android:gravity="center"
+        android:textColor="#E8EEFF"
+        android:textSize="13sp"
+        android:visibility="gone"
+        android:text="Copier le code" />
+
+    <TextView
+        android:id="@+id/arenaStatusPrimary"
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/arena_send_btn_bg"
+        android:gravity="center"
+        android:textColor="#1A1200"
+        android:textStyle="bold"
+        android:textSize="13.5sp"
+        android:visibility="gone"
+        android:text="Envoyer" />
+
+</LinearLayout>

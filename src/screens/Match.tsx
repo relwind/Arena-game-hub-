@@ -165,6 +165,19 @@ export function MatchRoom({ id }: { id: string }) {
                 <span className={'badge ' + (oppReady ? 'b-ok' : 'b-wait')}>Adversaire : {oppReady ? 'prêt' : 'pas prêt'}</span>
               </div>
               {!myReady && <button className="btn" disabled={busy} onClick={() => act(() => rpc('set_ready', { _match: id }), 'Tu es prêt')}>Je suis prêt</button>}
+              {m.ready_both_at && overlayAvailable() && (
+                <div className="card small stack" style={{ borderColor: bubbleLive ? 'var(--live)' : 'var(--gold)' }}>
+                  <b>{bubbleLive ? '🔴 Live en cours' : 'Bulle flottante'}</b>
+                  <div className="muted">
+                    {bubbleShown
+                      ? "La bulle est active par-dessus tes autres applis : elle t'indique qui crée la salle, affiche le code dès qu'il arrive, et te propose d'ouvrir eFootball directement."
+                      : "Ouvre la bulle avant d'aller sur eFootball : elle gère l'échange du code de salle avec ton adversaire, puis reste là pour le live, la capture d'écran et la discussion."}
+                  </div>
+                  <button className="btn" style={bubbleShown ? { background: 'var(--line)' } : undefined} disabled={busy} onClick={toggleBubble}>
+                    {bubbleShown ? 'Fermer la bulle' : 'Ouvrir la bulle flottante'}
+                  </button>
+                </div>
+              )}
               {m.ready_both_at && !m.host_id && (
                 <>
                   <div className="small">Qui crée la salle dans eFootball ? (sinon, {A} sera hôte dans 2 minutes)</div>
@@ -185,19 +198,6 @@ export function MatchRoom({ id }: { id: string }) {
                     </div>
                   )}
                   {room?.room_code && !m.kicked_at && <button className="btn ghost" disabled={busy} onClick={() => act(() => rpc('mark_kicked', { _match: id }), 'Bon match !')}>La partie est lancée</button>}
-                  {room?.room_code && overlayAvailable() && (
-                    <div className="card small stack" style={{ borderColor: bubbleLive ? 'var(--live)' : 'var(--gold)' }}>
-                      <b>{bubbleLive ? '🔴 Live en cours' : 'Bulle de diffusion'}</b>
-                      <div className="muted">
-                        {bubbleShown
-                          ? "La bulle flottante est active au-dessus de tes autres applis. Ouvre-la pour démarrer le live, faire une capture d'écran ou discuter."
-                          : "Ouvre la bulle Arena avant de lancer eFootball : elle reste visible par-dessus le jeu pour démarrer ton live, prendre une capture d'écran ou discuter."}
-                      </div>
-                      <button className="btn" style={bubbleShown ? { background: 'var(--line)' } : undefined} disabled={busy} onClick={toggleBubble}>
-                        {bubbleShown ? 'Fermer la bulle' : 'Ouvrir la bulle flottante'}
-                      </button>
-                    </div>
-                  )}
                 </>
               )}
               {m.over && <div className="small" style={{ color: 'var(--live)' }}>Durée maximale dépassée : envoyez le score maintenant.</div>}

@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -75,6 +77,7 @@ class OverlayService : Service() {
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var menuView: View? = null
     private var chatView: View? = null
+    private var statusView: View? = null
 
     private var sessionId: String = ""
     private var matchId: String = ""
@@ -91,6 +94,12 @@ class OverlayService : Service() {
     private var chatPoll: Runnable? = null
     private val nameCache = HashMap<String, String>()
 
+    // État de la salle de match, avant que la partie ne soit lancée.
+    private var hostId: String? = null
+    private var roomCode: String? = null
+    private var kickedAt: String? = null
+    private var matchPoll: Runnable? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -105,7 +114,12 @@ class OverlayService : Service() {
                 userId = intent?.getStringExtra("userId") ?: userId
                 displayName = intent?.getStringExtra("displayName") ?: displayName
                 startForegroundNotif()
-                if (!isRunning) { wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager; showBubble() }
+                if (!isRunning) {
+                    wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                    showBubble()
+                    refreshMatchState()
+                    startMatchPoll()
+                }
                 isRunning = true
             }
         }
@@ -173,7 +187,7 @@ class OverlayService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!dragged) toggleMenu()
+                    if (!dragged) onBubbleTap()
                     true
                 }
                 else -> false
@@ -227,6 +241,141 @@ class OverlayService : Service() {
     private fun removeView(v: View?) {
         if (v == null) return
         try { wm.removeView(v) } catch (_: Exception) {}
+    }
+
+    /** Avant le lancement de la partie : écran d'état (hôte / attente / code). Après : menu habituel. */
+    private fun onBubbleTap() {
+        if (kickedAt != null) toggleMenu() else toggleStatus()
+    }
+
+    // ---------------------------------------------------------------- salle de match (avant la partie)
+
+    private fun startMatchPoll() {
+        if (matchId.isEmpty()) return
+        val r = object : Runnable { override fun run() { refreshMatchState(); if (kickedAt == null) handler.postDelayed(this, 5000) } }
+        matchPoll = r
+        handler.postDelayed(r, 5000)
+    }
+
+    private fun stopMatchPoll() { matchPoll?.let { handler.removeCallbacks(it) }; matchPoll = null }
+
+    private fun refreshMatchState() {
+        if (matchId.isEmpty()) return
+        BubbleHttp.selectRows(supabaseUrl, supabaseKey, accessToken, "matches?id=eq.$matchId&select=host_id,kicked_at") { rows ->
+            val row = rows?.optJSONObject(0)
+            hostId = row?.optString("host_id")?.takeIf { it.isNotEmpty() && it != "null" }
+            kickedAt = row?.optString("kicked_at")?.takeIf { it.isNotEmpty() && it != "null" }
+            BubbleHttp.selectRows(supabaseUrl, supabaseKey, accessToken, "match_room?match_id=eq.$matchId&select=room_code") { rows2 ->
+                roomCode = rows2?.optJSONObject(0)?.optString("room_code")?.takeIf { it.isNotEmpty() }
+                handler.post { statusView?.let { renderStatus(it) } }
+            }
+        }
+    }
+
+    private fun toggleStatus() {
+        if (statusView != null) { removeView(statusView); statusView = null; return }
+        val inflater = LayoutInflater.from(this)
+        val view = inflater.inflate(R.layout.arena_status, null)
+        statusView = view
+
+        view.findViewById<View>(R.id.arenaStatusClose).setOnClickListener { removeView(statusView); statusView = null }
+
+        view.findViewById<View>(R.id.arenaStatusPrimary).setOnClickListener {
+            val input = view.findViewById<EditText>(R.id.arenaStatusInput)
+            if (hostId == userId && roomCode == null) {
+                val code = input.text.toString().trim()
+                if (code.isEmpty()) { toast("Entre le code de la salle."); return@setOnClickListener }
+                BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "post_room_code", JSONObject().put("_match", matchId).put("_code", code)) {
+                    refreshMatchState()
+                }
+            } else if (roomCode != null) {
+                BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "mark_kicked", JSONObject().put("_match", matchId)) {
+                    kickedAt = kickedAt ?: java.util.Date().toString()
+                    refreshMatchState()
+                }
+                openEfootball()
+                removeView(statusView); statusView = null
+            }
+        }
+        view.findViewById<View>(R.id.arenaStatusSecondary).setOnClickListener {
+            val code = roomCode
+            if (code != null) {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("Code Arena", code))
+                toast("Code copié")
+            }
+        }
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType(), WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
+        )
+        params.gravity = Gravity.TOP or Gravity.START
+        val bp = bubbleParams
+        params.x = ((bp?.x ?: 0) - 270).coerceAtLeast(10)
+        params.y = bp?.y ?: 200
+        wm.addView(view, params)
+        renderStatus(view)
+    }
+
+    private fun renderStatus(view: View) {
+        val title = view.findViewById<TextView>(R.id.arenaStatusTitle)
+        val body = view.findViewById<TextView>(R.id.arenaStatusBody)
+        val input = view.findViewById<EditText>(R.id.arenaStatusInput)
+        val secondary = view.findViewById<TextView>(R.id.arenaStatusSecondary)
+        val primary = view.findViewById<TextView>(R.id.arenaStatusPrimary)
+        input.visibility = View.GONE; secondary.visibility = View.GONE; primary.visibility = View.GONE
+
+        when {
+            kickedAt != null -> {
+                title.text = "Partie en cours"
+                body.text = "La partie a déjà été lancée. Ferme cet écran pour accéder au live et à la capture d'écran."
+            }
+            hostId == null -> {
+                title.text = "En attente"
+                body.text = "En attente de la désignation de l'hôte par Arena…"
+            }
+            hostId == userId && roomCode == null -> {
+                title.text = "Tu es l'hôte"
+                body.text = "Crée la salle dans eFootball, puis colle ici le code à donner à ton adversaire."
+                input.visibility = View.VISIBLE
+                primary.text = "Envoyer le code"
+                primary.visibility = View.VISIBLE
+            }
+            hostId == userId && roomCode != null -> {
+                title.text = "Salle créée"
+                body.text = "Code envoyé à ton adversaire : $roomCode"
+                secondary.visibility = View.VISIBLE
+                primary.text = "Ouvrir eFootball"
+                primary.visibility = View.VISIBLE
+            }
+            hostId != userId && roomCode == null -> {
+                title.text = "En attente du code"
+                body.text = "Ton adversaire crée la salle dans eFootball. Patiente, le code apparaîtra ici."
+            }
+            else -> {
+                title.text = "Code reçu"
+                body.text = "Code de la salle : $roomCode"
+                secondary.visibility = View.VISIBLE
+                primary.text = "Ouvrir eFootball"
+                primary.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun openEfootball() {
+        try {
+            val pm = packageManager
+            val launch = pm.getLaunchIntentForPackage("jp.konami.pesam")
+            if (launch != null) {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(launch)
+            } else {
+                toast("eFootball n'est pas installé sur ce téléphone.")
+            }
+        } catch (e: Exception) {
+            toast("Impossible d'ouvrir eFootball.")
+        }
     }
 
     // ---------------------------------------------------------------- live (capture d'écran + signal serveur)
@@ -444,8 +593,10 @@ class OverlayService : Service() {
     private fun stopEverything() {
         if (isLive) stopLive()
         stopChatPoll()
+        stopMatchPoll()
         removeView(chatView); chatView = null
         removeView(menuView); menuView = null
+        removeView(statusView); statusView = null
         removeView(bubbleView); bubbleView = null
         isRunning = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") stopForeground(true)
