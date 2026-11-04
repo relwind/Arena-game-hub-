@@ -81,6 +81,9 @@ class OverlayService : Service() {
 
     private var sessionId: String = ""
     private var matchId: String = ""
+    private var roomId: String = ""
+    private var mode: String = "match" // "match" (compétition) ou "room" (match amical)
+    private var roomOpened = false // vrai une fois qu'on a déjà ouvert eFootball depuis la bulle (mode "room")
     private var supabaseUrl: String = ""
     private var supabaseKey: String = ""
     private var accessToken: String = ""
@@ -108,6 +111,8 @@ class OverlayService : Service() {
             else -> {
                 sessionId = intent?.getStringExtra("sessionId") ?: sessionId
                 matchId = intent?.getStringExtra("matchId") ?: matchId
+                roomId = intent?.getStringExtra("roomId") ?: roomId
+                mode = intent?.getStringExtra("mode") ?: mode
                 supabaseUrl = intent?.getStringExtra("supabaseUrl") ?: supabaseUrl
                 supabaseKey = intent?.getStringExtra("supabaseKey") ?: supabaseKey
                 accessToken = intent?.getStringExtra("accessToken") ?: accessToken
@@ -245,14 +250,21 @@ class OverlayService : Service() {
 
     /** Avant le lancement de la partie : écran d'état (hôte / attente / code). Après : menu habituel. */
     private fun onBubbleTap() {
-        if (kickedAt != null) toggleMenu() else toggleStatus()
+        val gameStarted = if (mode == "room") roomOpened else kickedAt != null
+        if (gameStarted) toggleMenu() else toggleStatus()
     }
 
-    // ---------------------------------------------------------------- salle de match (avant la partie)
+    // ---------------------------------------------------------------- salle de match / salle amicale (avant la partie)
 
     private fun startMatchPoll() {
-        if (matchId.isEmpty()) return
-        val r = object : Runnable { override fun run() { refreshMatchState(); if (kickedAt == null) handler.postDelayed(this, 5000) } }
+        if (matchId.isEmpty() && roomId.isEmpty()) return
+        val r = object : Runnable {
+            override fun run() {
+                refreshMatchState()
+                val gameStarted = if (mode == "room") roomOpened else kickedAt != null
+                if (!gameStarted) handler.postDelayed(this, 5000)
+            }
+        }
         matchPoll = r
         handler.postDelayed(r, 5000)
     }
@@ -260,6 +272,14 @@ class OverlayService : Service() {
     private fun stopMatchPoll() { matchPoll?.let { handler.removeCallbacks(it) }; matchPoll = null }
 
     private fun refreshMatchState() {
+        if (mode == "room") {
+            if (roomId.isEmpty()) return
+            BubbleHttp.selectRows(supabaseUrl, supabaseKey, accessToken, "rooms?id=eq.$roomId&select=efootball_code") { rows ->
+                roomCode = rows?.optJSONObject(0)?.optString("efootball_code")?.takeIf { it.isNotEmpty() }
+                handler.post { statusView?.let { renderStatus(it) } }
+            }
+            return
+        }
         if (matchId.isEmpty()) return
         BubbleHttp.selectRows(supabaseUrl, supabaseKey, accessToken, "matches?id=eq.$matchId&select=host_id,kicked_at") { rows ->
             val row = rows?.optJSONObject(0)
@@ -282,6 +302,20 @@ class OverlayService : Service() {
 
         view.findViewById<View>(R.id.arenaStatusPrimary).setOnClickListener {
             val input = view.findViewById<EditText>(R.id.arenaStatusInput)
+            if (mode == "room") {
+                if (roomCode == null) {
+                    val code = input.text.toString().trim()
+                    if (code.isEmpty()) { toast("Entre le code de la salle."); return@setOnClickListener }
+                    BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "post_room_efootball_code", JSONObject().put("_room", roomId).put("_code", code)) {
+                        refreshMatchState()
+                    }
+                } else {
+                    roomOpened = true
+                    openEfootball()
+                    removeView(statusView); statusView = null
+                }
+                return@setOnClickListener
+            }
             if (hostId == userId && roomCode == null) {
                 val code = input.text.toString().trim()
                 if (code.isEmpty()) { toast("Entre le code de la salle."); return@setOnClickListener }
@@ -325,6 +359,23 @@ class OverlayService : Service() {
         val secondary = view.findViewById<TextView>(R.id.arenaStatusSecondary)
         val primary = view.findViewById<TextView>(R.id.arenaStatusPrimary)
         input.visibility = View.GONE; secondary.visibility = View.GONE; primary.visibility = View.GONE
+
+        if (mode == "room") {
+            if (roomCode == null) {
+                title.text = "Code de la salle eFootball"
+                body.text = "Si tu as déjà créé la salle dans eFootball, indique le code ici. Sinon, attends qu'un coéquipier l'envoie."
+                input.visibility = View.VISIBLE
+                primary.text = "Envoyer le code"
+                primary.visibility = View.VISIBLE
+            } else {
+                title.text = "Code reçu"
+                body.text = "Code de la salle : $roomCode"
+                secondary.visibility = View.VISIBLE
+                primary.text = "Ouvrir eFootball"
+                primary.visibility = View.VISIBLE
+            }
+            return
+        }
 
         when {
             kickedAt != null -> {
@@ -406,7 +457,9 @@ class OverlayService : Service() {
             isLive = true
             bubbleView?.findViewById<TextView>(R.id.arenaBubbleFace)?.setBackgroundResource(R.drawable.arena_bubble_bg_live)
             toast("Live démarré")
-            BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "start_live", JSONObject().put("_match", matchId)) { text ->
+            val fn = if (mode == "room") "start_room_live" else "start_live"
+            val arg = if (mode == "room") "_room" to roomId else "_match" to matchId
+            BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, fn, JSONObject().put(arg.first, arg.second)) { text ->
                 val newId = text?.trim()?.trim('"')
                 if (newId.isNullOrEmpty()) {
                     handler.post { toast("Le live a démarré localement, mais le serveur n'a pas confirmé.") }
@@ -428,7 +481,9 @@ class OverlayService : Service() {
         virtualDisplay = null; mediaProjection = null; imageReader = null
         bubbleView?.findViewById<TextView>(R.id.arenaBubbleFace)?.setBackgroundResource(R.drawable.arena_bubble_bg)
         toast("Live arrêté")
-        BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "stop_live", JSONObject().put("_match", matchId))
+        val stopFn = if (mode == "room") "stop_room_live" else "stop_live"
+        val stopArg = if (mode == "room") "_room" to roomId else "_match" to matchId
+        BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, stopFn, JSONObject().put(stopArg.first, stopArg.second))
         pluginRef?.emit("liveStateChanged", JSObject().put("live", false))
     }
 

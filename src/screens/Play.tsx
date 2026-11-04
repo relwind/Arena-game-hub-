@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
-import { sb } from '../lib/supabase'
+import React, { useEffect, useState } from 'react'
+import { sb, SUPABASE_URL, SUPABASE_KEY } from '../lib/supabase'
 import { useApp, useLoad, q, rpc, Top, Spin, ErrBox, errMsg, namesOf, GameArt, Av, openEfootball } from '../lib/ui'
+import { overlayAvailable, startArenaBubble, stopArenaBubble, arenaBubbleStatus, onArenaLiveStateChanged } from '../lib/overlay'
 
 const rid = (r: any) => (typeof r === 'string' ? r : r?.id || r?.room_id || (Array.isArray(r) ? rid(r[0]) : r))
 
@@ -201,6 +202,38 @@ export function RoomPlay({ id }: { id: string }) {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [rated, setRated] = useState(false)
+  const [bubbleShown, setBubbleShown] = useState(false)
+  const [bubbleLive, setBubbleLive] = useState(false)
+
+  useEffect(() => {
+    arenaBubbleStatus().then((s) => { setBubbleShown(s.shown); setBubbleLive(s.live) })
+    const sub = onArenaLiveStateChanged((live) => setBubbleLive(live))
+    return () => { try { sub.remove() } catch {} }
+  }, [])
+
+  const toggleBubble = async () => {
+    if (bubbleShown) { await stopArenaBubble(); setBubbleShown(false); setBubbleLive(false); return }
+    try {
+      const { data: s } = await sb.auth.getSession()
+      const token = s.session?.access_token
+      if (!token) return setErr('Session expirée, reconnecte-toi.')
+      await startArenaBubble({
+        roomId: id,
+        mode: 'room',
+        supabaseUrl: SUPABASE_URL,
+        supabaseKey: SUPABASE_KEY,
+        accessToken: token,
+        userId: me.id,
+        displayName: me.profile?.username || 'Joueur',
+      })
+      setBubbleShown(true)
+    } catch (e: any) {
+      if (e.message === 'not_native') setErr("La bulle flottante n'est disponible que dans l'application Android.")
+      else if (e.message === 'overlay_denied') setErr("Autorisation « Affichage par-dessus les autres apps » refusée : la bulle ne peut pas s'ouvrir.")
+      else if (e.message === 'projection_denied') setErr("Autorisation de capture d'écran refusée : le live ne pourra pas démarrer.")
+      else setErr(errMsg(e))
+    }
+  }
   const { data, loading, reload } = useLoad(async () => {
     const d = await loadRoom(id)
     const ids = d.pl.map((p) => p.user_id).filter((u) => u !== me.id)
@@ -229,7 +262,20 @@ export function RoomPlay({ id }: { id: string }) {
           <Av name={names[opp[0]?.user_id]} size={50} />
         </div>
       </div>
-      {!closed && <button className="btn" style={{ marginBottom: 10 }} onClick={() => openEfootball(toast)}>Ouvrir le jeu</button>}
+      {!closed && overlayAvailable() && (
+        <div className="card small stack" style={{ marginBottom: 10, borderColor: bubbleLive ? 'var(--live)' : 'var(--gold)' }}>
+          <b>{bubbleLive ? '🔴 Live en cours' : 'Bulle flottante'}</b>
+          <div className="muted">
+            {bubbleShown
+              ? "La bulle est active par-dessus eFootball : échangez-y le code de la salle, puis utilisez-la pour le live, la capture d'écran et la discussion."
+              : "Ouvre la bulle avant d'aller sur eFootball : n'importe qui peut y indiquer le code de la salle, elle reste ensuite affichée pour le live et la discussion."}
+          </div>
+          <button className="btn" style={bubbleShown ? { background: 'var(--line)' } : undefined} disabled={busy} onClick={toggleBubble}>
+            {bubbleShown ? 'Fermer la bulle' : 'Ouvrir la bulle flottante'}
+          </button>
+        </div>
+      )}
+      {!closed && <button className="btn ghost" style={{ marginBottom: 10 }} onClick={() => openEfootball(toast)}>Ouvrir le jeu directement</button>}
       <div className="card small muted" style={{ marginBottom: 10 }}>Joue ta partie dans eFootball avec le code de salle, puis reviens ici pour la terminer.</div>
       <div className="stack">
         {opp.map((p) => (

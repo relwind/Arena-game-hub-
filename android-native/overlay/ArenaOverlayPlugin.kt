@@ -77,6 +77,8 @@ class ArenaOverlayPlugin : Plugin() {
             action = OverlayService.ACTION_START
             putExtra("sessionId", call.getString("sessionId", ""))
             putExtra("matchId", call.getString("matchId", ""))
+            putExtra("roomId", call.getString("roomId", ""))
+            putExtra("mode", call.getString("mode", "match"))
             putExtra("supabaseUrl", call.getString("supabaseUrl", ""))
             putExtra("supabaseKey", call.getString("supabaseKey", ""))
             putExtra("accessToken", call.getString("accessToken", ""))

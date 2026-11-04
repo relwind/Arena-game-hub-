@@ -33,6 +33,7 @@ export function MatchRoom({ id }: { id: string }) {
       if (!token) return setErr('Session expirée, reconnecte-toi.')
       await startArenaBubble({
         matchId: id,
+        mode: 'match',
         supabaseUrl: SUPABASE_URL,
         supabaseKey: SUPABASE_KEY,
         accessToken: token,

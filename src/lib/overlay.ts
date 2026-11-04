@@ -7,6 +7,8 @@ interface ArenaOverlayPlugin {
   showBubble(opts: {
     sessionId: string
     matchId: string
+    roomId: string
+    mode: 'match' | 'room'
     supabaseUrl: string
     supabaseKey: string
     accessToken: string
@@ -31,7 +33,9 @@ export function overlayAvailable() {
  * Doit être appelé pendant que l'appli Arena est au premier plan.
  */
 export async function startArenaBubble(args: {
-  matchId: string
+  matchId?: string
+  roomId?: string
+  mode: 'match' | 'room'
   supabaseUrl: string
   supabaseKey: string
   accessToken: string
@@ -44,7 +48,7 @@ export async function startArenaBubble(args: {
   if (!perm.granted) throw new Error('overlay_denied')
   const proj = await ArenaOverlay.requestProjectionPermission()
   if (!proj.granted) throw new Error('projection_denied')
-  await ArenaOverlay.showBubble({ sessionId: '', ...args })
+  await ArenaOverlay.showBubble({ sessionId: '', matchId: '', roomId: '', ...args })
 }
 
 export async function stopArenaBubble() {
