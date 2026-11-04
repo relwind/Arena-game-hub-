@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="10dp"
+    android:background="@drawable/arena_panel_bg"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:id="@+id/arenaBtnLive"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <TextView
+            android:id="@+id/arenaBtnLiveIcon"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/arena_menu_btn_bg"
+            android:gravity="center"
+            android:textSize="16sp"
+            android:text="▶" />
+        <TextView
+            android:id="@+id/arenaBtnLiveLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textColor="#E8EEFF"
+            android:textSize="13sp"
+            android:text="Démarrer le live" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/arenaBtnShot"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <TextView
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/arena_menu_btn_bg"
+            android:gravity="center"
+            android:textSize="16sp"
+            android:text="📸" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textColor="#E8EEFF"
+            android:textSize="13sp"
+            android:text="Capture d'écran" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/arenaBtnChat"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <TextView
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/arena_menu_btn_bg"
+            android:gravity="center"
+            android:textSize="16sp"
+            android:text="💬" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textColor="#E8EEFF"
+            android:textSize="13sp"
+            android:text="Discussion" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/arenaBtnClose"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <TextView
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/arena_menu_btn_bg"
+            android:gravity="center"
+            android:textSize="16sp"
+            android:textColor="#8A98BF"
+            android:text="✕" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textColor="#8A98BF"
+            android:textSize="13sp"
+            android:text="Fermer la bulle" />
+    </LinearLayout>
+
+</LinearLayout>

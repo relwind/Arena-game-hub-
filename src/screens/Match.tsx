@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { sb } from '../lib/supabase'
+import { sb, SUPABASE_URL, SUPABASE_KEY } from '../lib/supabase'
 import { uploadProof, ProofLink } from '../lib/img'
 import { useApp, useLoad, q, rpc, fmt, hhmm, leftTxt, Top, Spin, ErrBox, errMsg, namesOf, GameArt } from '../lib/ui'
+import { overlayAvailable, startArenaBubble, stopArenaBubble, arenaBubbleStatus, onArenaLiveStateChanged } from '../lib/overlay'
 
 export function MatchRoom({ id }: { id: string }) {
   const { me, toast } = useApp()
@@ -15,6 +16,37 @@ export function MatchRoom({ id }: { id: string }) {
   const [forf, setForf] = useState(false)
   const [cap, setCap] = useState<File | null>(null)
   const chatEnd = useRef<HTMLDivElement>(null)
+  const [bubbleShown, setBubbleShown] = useState(false)
+  const [bubbleLive, setBubbleLive] = useState(false)
+
+  useEffect(() => {
+    arenaBubbleStatus().then((s) => { setBubbleShown(s.shown); setBubbleLive(s.live) })
+    const sub = onArenaLiveStateChanged((live) => setBubbleLive(live))
+    return () => { try { sub.remove() } catch {} }
+  }, [])
+
+  const toggleBubble = async () => {
+    if (bubbleShown) { await stopArenaBubble(); setBubbleShown(false); setBubbleLive(false); return }
+    try {
+      const { data: s } = await sb.auth.getSession()
+      const token = s.session?.access_token
+      if (!token) return setErr('Session expirée, reconnecte-toi.')
+      await startArenaBubble({
+        matchId: id,
+        supabaseUrl: SUPABASE_URL,
+        supabaseKey: SUPABASE_KEY,
+        accessToken: token,
+        userId: me.id,
+        displayName: me.profile?.username || 'Joueur',
+      })
+      setBubbleShown(true)
+    } catch (e: any) {
+      if (e.message === 'not_native') setErr("La bulle flottante n'est disponible que dans l'application Android.")
+      else if (e.message === 'overlay_denied') setErr("Autorisation « Affichage par-dessus les autres apps » refusée : la bulle ne peut pas s'ouvrir.")
+      else if (e.message === 'projection_denied') setErr("Autorisation de capture d'écran refusée : le live ne pourra pas démarrer.")
+      else setErr(errMsg(e))
+    }
+  }
 
   const { data, loading, reload } = useLoad(async () => {
     const m = await q<any>(sb.from('matches').select('*').eq('id', id).single())
@@ -153,6 +185,19 @@ export function MatchRoom({ id }: { id: string }) {
                     </div>
                   )}
                   {room?.room_code && !m.kicked_at && <button className="btn ghost" disabled={busy} onClick={() => act(() => rpc('mark_kicked', { _match: id }), 'Bon match !')}>La partie est lancée</button>}
+                  {room?.room_code && overlayAvailable() && (
+                    <div className="card small stack" style={{ borderColor: bubbleLive ? 'var(--live)' : 'var(--gold)' }}>
+                      <b>{bubbleLive ? '🔴 Live en cours' : 'Bulle de diffusion'}</b>
+                      <div className="muted">
+                        {bubbleShown
+                          ? "La bulle flottante est active au-dessus de tes autres applis. Ouvre-la pour démarrer le live, faire une capture d'écran ou discuter."
+                          : "Ouvre la bulle Arena avant de lancer eFootball : elle reste visible par-dessus le jeu pour démarrer ton live, prendre une capture d'écran ou discuter."}
+                      </div>
+                      <button className="btn" style={bubbleShown ? { background: 'var(--line)' } : undefined} disabled={busy} onClick={toggleBubble}>
+                        {bubbleShown ? 'Fermer la bulle' : 'Ouvrir la bulle flottante'}
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
               {m.over && <div className="small" style={{ color: 'var(--live)' }}>Durée maximale dépassée : envoyez le score maintenant.</div>}

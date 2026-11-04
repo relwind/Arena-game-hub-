@@ -1,0 +1,459 @@
+package app.arena.overlay
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
+import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
+import android.hardware.display.VirtualDisplay
+import android.media.ImageReader
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
+import android.os.Build
+import android.os.Environment
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.util.DisplayMetrics
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
+import app.arena.gamehub.R
+import com.getcapacitor.JSObject
+import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/**
+ * Service qui fait vivre la bulle flottante Arena par-dessus les autres applications
+ * (notamment eFootball) : démarrage/arrêt du live, capture d'écran, et une petite
+ * fenêtre de discussion. Tourne en foreground service pour ne pas être tué par le
+ * système pendant que le joueur joue.
+ *
+ * NB : la diffusion vidéo réelle vers LiveKit n'est pas encore branchée ici (il faut
+ * d'abord les identifiants LiveKit Cloud). Pour l'instant, "Démarrer le live" ouvre
+ * déjà la capture d'écran (MediaProjection) et prévient le serveur Arena (start_live),
+ * ce qui permet de tester toute la mécanique de la bulle. Le branchement vers LiveKit
+ * (publication de la piste vidéo) viendra se greffer sur le VirtualDisplay déjà créé ici.
+ */
+class OverlayService : Service() {
+
+    companion object {
+        const val ACTION_START = "app.arena.overlay.START"
+        const val ACTION_STOP = "app.arena.overlay.STOP"
+        const val CHANNEL_ID = "arena_live_bubble"
+        const val NOTIF_ID = 4210
+
+        var pluginRef: ArenaOverlayPlugin? = null
+        var pendingProjectionResultCode: Int? = null
+        var pendingProjectionData: Intent? = null
+
+        @Volatile var isRunning = false
+        @Volatile var isLive = false
+    }
+
+    private lateinit var wm: WindowManager
+    private val handler = Handler(Looper.getMainLooper())
+
+    private var bubbleView: View? = null
+    private var bubbleParams: WindowManager.LayoutParams? = null
+    private var menuView: View? = null
+    private var chatView: View? = null
+
+    private var sessionId: String = ""
+    private var matchId: String = ""
+    private var supabaseUrl: String = ""
+    private var supabaseKey: String = ""
+    private var accessToken: String = ""
+    private var userId: String = ""
+    private var displayName: String = "Joueur"
+
+    private var mediaProjection: MediaProjection? = null
+    private var virtualDisplay: VirtualDisplay? = null
+    private var imageReader: ImageReader? = null
+
+    private var chatPoll: Runnable? = null
+    private val nameCache = HashMap<String, String>()
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_STOP -> { stopEverything(); return START_NOT_STICKY }
+            else -> {
+                sessionId = intent?.getStringExtra("sessionId") ?: sessionId
+                matchId = intent?.getStringExtra("matchId") ?: matchId
+                supabaseUrl = intent?.getStringExtra("supabaseUrl") ?: supabaseUrl
+                supabaseKey = intent?.getStringExtra("supabaseKey") ?: supabaseKey
+                accessToken = intent?.getStringExtra("accessToken") ?: accessToken
+                userId = intent?.getStringExtra("userId") ?: userId
+                displayName = intent?.getStringExtra("displayName") ?: displayName
+                startForegroundNotif()
+                if (!isRunning) { wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager; showBubble() }
+                isRunning = true
+            }
+        }
+        return START_STICKY
+    }
+
+    // ---------------------------------------------------------------- notification
+
+    private fun startForegroundNotif() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
+                mgr.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Bulle Arena", NotificationManager.IMPORTANCE_LOW))
+            }
+        }
+        val stopIntent = Intent(this, OverlayService::class.java).apply { action = ACTION_STOP }
+        val stopPending = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE)
+        val notif = Notification.Builder(this, CHANNEL_ID)
+            .setContentTitle("Arena Game Hub")
+            .setContentText("La bulle Arena est active")
+            .setSmallIcon(R.drawable.ic_stat_arena)
+            .addAction(0, "Arrêter la bulle", stopPending)
+            .setOngoing(true)
+            .build()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+        } else {
+            startForeground(NOTIF_ID, notif)
+        }
+    }
+
+    private fun overlayType() =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
+
+    // ---------------------------------------------------------------- bulle
+
+    private fun showBubble() {
+        val inflater = LayoutInflater.from(this)
+        val view = inflater.inflate(R.layout.arena_bubble, null)
+        bubbleView = view
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        )
+        params.gravity = Gravity.TOP or Gravity.START
+        val dm = DisplayMetrics(); wm.defaultDisplay.getMetrics(dm)
+        params.x = dm.widthPixels - 180
+        params.y = dm.heightPixels / 3
+        bubbleParams = params
+
+        var downX = 0f; var downY = 0f; var startX = 0; var startY = 0; var dragged = false
+        view.setOnTouchListener { _, ev ->
+            when (ev.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = ev.rawX; downY = ev.rawY; startX = params.x; startY = params.y; dragged = false; true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (ev.rawX - downX).toInt(); val dy = (ev.rawY - downY).toInt()
+                    if (Math.abs(dx) > 12 || Math.abs(dy) > 12) dragged = true
+                    params.x = startX + dx; params.y = startY + dy
+                    try { wm.updateViewLayout(view, params) } catch (_: Exception) {}
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!dragged) toggleMenu()
+                    true
+                }
+                else -> false
+            }
+        }
+        wm.addView(view, params)
+    }
+
+    private fun toggleMenu() {
+        if (menuView != null) { removeView(menuView); menuView = null; return }
+        val inflater = LayoutInflater.from(this)
+        val view = inflater.inflate(R.layout.arena_menu, null)
+        menuView = view
+
+        val liveIcon = view.findViewById<TextView>(R.id.arenaBtnLiveIcon)
+        val liveLabel = view.findViewById<TextView>(R.id.arenaBtnLiveLabel)
+        updateLiveMenuLabel(liveIcon, liveLabel)
+
+        view.findViewById<View>(R.id.arenaBtnLive).setOnClickListener {
+            removeView(menuView); menuView = null
+            if (isLive) stopLive() else startLive()
+        }
+        view.findViewById<View>(R.id.arenaBtnShot).setOnClickListener {
+            removeView(menuView); menuView = null
+            takeScreenshot()
+        }
+        view.findViewById<View>(R.id.arenaBtnChat).setOnClickListener {
+            removeView(menuView); menuView = null
+            toggleChat()
+        }
+        view.findViewById<View>(R.id.arenaBtnClose).setOnClickListener {
+            removeView(menuView); menuView = null
+            stopEverything()
+        }
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType(), WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
+        )
+        params.gravity = Gravity.TOP or Gravity.START
+        val bp = bubbleParams
+        params.x = ((bp?.x ?: 0) - 190).coerceAtLeast(10)
+        params.y = bp?.y ?: 200
+        wm.addView(view, params)
+    }
+
+    private fun updateLiveMenuLabel(icon: TextView, label: TextView) {
+        if (isLive) { icon.text = "⏹"; label.text = "Arrêter le live" } else { icon.text = "▶"; label.text = "Démarrer le live" }
+    }
+
+    private fun removeView(v: View?) {
+        if (v == null) return
+        try { wm.removeView(v) } catch (_: Exception) {}
+    }
+
+    // ---------------------------------------------------------------- live (capture d'écran + signal serveur)
+
+    private fun startLive() {
+        val resultCode = pendingProjectionResultCode
+        val data = pendingProjectionData
+        if (resultCode == null || data == null) {
+            toast("Autorisation de capture d'écran manquante. Rouvrez Arena pour l'accorder.")
+            return
+        }
+        val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        try {
+            val projection = mgr.getMediaProjection(resultCode, data)
+            mediaProjection = projection
+            // Obligatoire depuis Android 14 : un callback doit être enregistré avant toute
+            // utilisation de la projection (sinon exception à la création du VirtualDisplay).
+            projection.registerCallback(object : MediaProjection.Callback() {
+                override fun onStop() { if (isLive) stopLive() }
+            }, handler)
+            val dm = DisplayMetrics(); wm.defaultDisplay.getMetrics(dm)
+            val reader = ImageReader.newInstance(dm.widthPixels, dm.heightPixels, PixelFormat.RGBA_8888, 2)
+            imageReader = reader
+            virtualDisplay = projection.createVirtualDisplay(
+                "ArenaLive", dm.widthPixels, dm.heightPixels, dm.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.surface, null, handler
+            )
+            isLive = true
+            bubbleView?.findViewById<TextView>(R.id.arenaBubbleFace)?.setBackgroundResource(R.drawable.arena_bubble_bg_live)
+            toast("Live démarré")
+            BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "start_live", JSONObject().put("_match", matchId)) { text ->
+                val newId = text?.trim()?.trim('"')
+                if (newId.isNullOrEmpty()) {
+                    handler.post { toast("Le live a démarré localement, mais le serveur n'a pas confirmé.") }
+                } else {
+                    sessionId = newId
+                }
+            }
+            pluginRef?.emit("liveStateChanged", JSObject().put("live", true))
+        } catch (e: Exception) {
+            toast("Impossible de démarrer le live : ${e.message}")
+        }
+    }
+
+    private fun stopLive() {
+        isLive = false
+        try { virtualDisplay?.release() } catch (_: Exception) {}
+        try { mediaProjection?.stop() } catch (_: Exception) {}
+        try { imageReader?.close() } catch (_: Exception) {}
+        virtualDisplay = null; mediaProjection = null; imageReader = null
+        bubbleView?.findViewById<TextView>(R.id.arenaBubbleFace)?.setBackgroundResource(R.drawable.arena_bubble_bg)
+        toast("Live arrêté")
+        BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "stop_live", JSONObject().put("_match", matchId))
+        pluginRef?.emit("liveStateChanged", JSObject().put("live", false))
+    }
+
+    // ---------------------------------------------------------------- capture d'écran
+
+    private fun takeScreenshot() {
+        val reader = imageReader
+        if (reader == null) {
+            toast("Démarrez le live pour pouvoir capturer l'écran.")
+            return
+        }
+        try {
+            val image = reader.acquireLatestImage()
+            if (image == null) { toast("Capture indisponible pour l'instant, réessayez."); return }
+            val plane = image.planes[0]
+            val buffer = plane.buffer
+            val pixelStride = plane.pixelStride
+            val rowStride = plane.rowStride
+            val rowPadding = rowStride - pixelStride * image.width
+            val bitmap = Bitmap.createBitmap(image.width + rowPadding / pixelStride, image.height, Bitmap.Config.ARGB_8888)
+            bitmap.copyPixelsFromBuffer(buffer)
+            image.close()
+
+            val dir = File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Arena")
+            if (!dir.exists()) dir.mkdirs()
+            val name = "arena_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.FRANCE).format(Date()) + ".png"
+            val file = File(dir, name)
+            FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 95, it) }
+            bitmap.recycle()
+
+            toast("Capture enregistrée dans Images/Arena")
+            pluginRef?.emit("screenshotTaken", JSObject().put("path", file.absolutePath))
+        } catch (e: Exception) {
+            toast("Capture impossible : ${e.message}")
+        }
+    }
+
+    // ---------------------------------------------------------------- chat
+
+    private fun toggleChat() {
+        if (chatView != null) { stopChatPoll(); removeView(chatView); chatView = null; return }
+        val inflater = LayoutInflater.from(this)
+        val view = inflater.inflate(R.layout.arena_chat, null)
+        chatView = view
+
+        view.findViewById<View>(R.id.arenaChatClose).setOnClickListener {
+            stopChatPoll(); removeView(chatView); chatView = null
+        }
+        val input = view.findViewById<EditText>(R.id.arenaChatInput)
+        val send = {
+            val text = input.text.toString().trim()
+            if (text.isNotEmpty() && sessionId.isNotEmpty()) {
+                input.setText("")
+                val body = JSONObject().put("session_id", sessionId).put("user_id", userId).put("body", text)
+                BubbleHttp.insertRow(supabaseUrl, supabaseKey, accessToken, "live_chat", body) { ok ->
+                    if (!ok) handler.post { toast("Message non envoyé (le live est-il bien en cours ?)") }
+                    loadChat(view, force = true)
+                }
+            } else if (sessionId.isEmpty()) {
+                toast("Démarrez le live pour pouvoir discuter.")
+            }
+        }
+        view.findViewById<View>(R.id.arenaChatSend).setOnClickListener { send() }
+
+        // en-tête draggable pour déplacer la fenêtre de discussion
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType(), 0, PixelFormat.TRANSLUCENT
+        )
+        params.gravity = Gravity.TOP or Gravity.START
+        val dm = DisplayMetrics(); wm.defaultDisplay.getMetrics(dm)
+        params.x = (dm.widthPixels - 320).coerceAtLeast(10)
+        params.y = dm.heightPixels / 4
+        var downX = 0f; var downY = 0f; var startX = 0; var startY = 0
+        view.findViewById<View>(R.id.arenaChatHeader).setOnTouchListener { _, ev ->
+            when (ev.action) {
+                MotionEvent.ACTION_DOWN -> { downX = ev.rawX; downY = ev.rawY; startX = params.x; startY = params.y; true }
+                MotionEvent.ACTION_MOVE -> {
+                    params.x = startX + (ev.rawX - downX).toInt(); params.y = startY + (ev.rawY - downY).toInt()
+                    try { wm.updateViewLayout(view, params) } catch (_: Exception) {}
+                    true
+                }
+                else -> false
+            }
+        }
+        wm.addView(view, params)
+        loadChat(view, force = true)
+        startChatPoll(view)
+    }
+
+    private fun startChatPoll(view: View) {
+        val r = object : Runnable { override fun run() { loadChat(view, force = false); handler.postDelayed(this, 4000) } }
+        chatPoll = r
+        handler.postDelayed(r, 4000)
+    }
+
+    private fun stopChatPoll() { chatPoll?.let { handler.removeCallbacks(it) }; chatPoll = null }
+
+    private fun loadChat(view: View, force: Boolean) {
+        if (sessionId.isEmpty()) {
+            handler.post {
+                val list = view.findViewById<LinearLayout>(R.id.arenaChatList)
+                if (list.childCount == 0) {
+                    val tv = TextView(this)
+                    tv.setTextColor(0xFF8A98BF.toInt()); tv.textSize = 12.5f
+                    tv.text = "Démarrez le live pour ouvrir la discussion."
+                    list.addView(tv)
+                }
+            }
+            return
+        }
+        val query = "live_chat?session_id=eq.$sessionId&select=user_id,body,created_at&order=created_at.asc&limit=50"
+        BubbleHttp.selectRows(supabaseUrl, supabaseKey, accessToken, query) { rows ->
+            if (rows == null) return@selectRows
+            resolveNames(rows) {
+                handler.post {
+                    val list = view.findViewById<LinearLayout>(R.id.arenaChatList)
+                    val scroll = view.findViewById<ScrollView>(R.id.arenaChatScroll)
+                    list.removeAllViews()
+                    for (i in 0 until rows.length()) {
+                        val o = rows.getJSONObject(i)
+                        val uid = o.optString("user_id", "")
+                        val who = if (uid == userId) "Toi" else (nameCache[uid] ?: "Joueur")
+                        val tv = TextView(this)
+                        tv.setTextColor(0xFFE8EEFF.toInt())
+                        tv.textSize = 12.5f
+                        tv.setPadding(0, 4, 0, 4)
+                        tv.text = "$who : ${o.optString("body", "")}"
+                        list.addView(tv)
+                    }
+                    scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+                }
+            }
+        }
+    }
+
+    /** Résout les pseudos des auteurs non encore en cache (une seule requête groupée). */
+    private fun resolveNames(rows: org.json.JSONArray, onDone: () -> Unit) {
+        val missing = LinkedHashSet<String>()
+        for (i in 0 until rows.length()) {
+            val uid = rows.getJSONObject(i).optString("user_id", "")
+            if (uid.isNotEmpty() && uid != userId && !nameCache.containsKey(uid)) missing.add(uid)
+        }
+        if (missing.isEmpty()) { onDone(); return }
+        val ids = missing.joinToString(",")
+        val query = "profiles?id=in.($ids)&select=id,username"
+        BubbleHttp.selectRows(supabaseUrl, supabaseKey, accessToken, query) { rows2 ->
+            if (rows2 != null) {
+                for (i in 0 until rows2.length()) {
+                    val o = rows2.getJSONObject(i)
+                    nameCache[o.optString("id", "")] = o.optString("username", "Joueur")
+                }
+            }
+            onDone()
+        }
+    }
+
+    // ---------------------------------------------------------------- nettoyage
+
+    private fun toast(msg: String) { handler.post { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() } }
+
+    private fun stopEverything() {
+        if (isLive) stopLive()
+        stopChatPoll()
+        removeView(chatView); chatView = null
+        removeView(menuView); menuView = null
+        removeView(bubbleView); bubbleView = null
+        isRunning = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") stopForeground(true)
+        stopSelf()
+    }
+
+    override fun onDestroy() {
+        stopEverything()
+        super.onDestroy()
+    }
+}
