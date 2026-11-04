@@ -86,6 +86,26 @@ const notifDrawable = `<vector xmlns:android="http://schemas.android.com/apk/res
 fs.mkdirSync(path.join(res, 'drawable'), { recursive: true })
 fs.writeFileSync(path.join(res, 'drawable/ic_stat_arena.xml'), notifDrawable)
 
+// --- Support Kotlin (le projet généré par Capacitor est en Java ; la bulle --
+// --- flottante est écrite en Kotlin, il faut donc activer le plugin Kotlin) -
+let rootGradle2 = fs.readFileSync(rootGradlePath, 'utf8')
+if (!rootGradle2.includes('kotlin-gradle-plugin')) {
+  rootGradle2 = rootGradle2.replace(
+    /dependencies\s*\{/,
+    `dependencies {\n        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24'`
+  )
+  fs.writeFileSync(rootGradlePath, rootGradle2)
+}
+
+let appGradle2 = fs.readFileSync(appGradlePath, 'utf8')
+if (!appGradle2.includes('kotlin-android')) {
+  appGradle2 += "\napply plugin: 'kotlin-android'\n"
+  const javaVerMatch = appGradle2.match(/VERSION_(\d+)/)
+  const jvmTarget = javaVerMatch ? javaVerMatch[1] : '17'
+  appGradle2 += `\nandroid {\n    kotlinOptions {\n        jvmTarget = "${jvmTarget}"\n    }\n}\n`
+  fs.writeFileSync(appGradlePath, appGradle2)
+}
+
 // --- Bulle flottante (live, capture d'écran, chat) --------------------------
 const overlayPkgDir = 'android/app/src/main/java/app/arena/overlay'
 fs.mkdirSync(overlayPkgDir, { recursive: true })
