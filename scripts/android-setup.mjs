@@ -99,10 +99,10 @@ if (!rootGradle2.includes('kotlin-gradle-plugin')) {
 
 let appGradle2 = fs.readFileSync(appGradlePath, 'utf8')
 if (!appGradle2.includes('kotlin-android')) {
+  // Même version de JDK que celle installée par le workflow CI (actions/setup-java),
+  // pour que compileDebugKotlin et compileDebugJavaWithJavac soient d'accord.
   appGradle2 += "\napply plugin: 'kotlin-android'\n"
-  const javaVerMatch = appGradle2.match(/VERSION_(\d+)/)
-  const jvmTarget = javaVerMatch ? javaVerMatch[1] : '17'
-  appGradle2 += `\nandroid {\n    kotlinOptions {\n        jvmTarget = "${jvmTarget}"\n    }\n}\n`
+  appGradle2 += `\nandroid {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_21\n        targetCompatibility JavaVersion.VERSION_21\n    }\n    kotlinOptions {\n        jvmTarget = "21"\n    }\n}\n`
   fs.writeFileSync(appGradlePath, appGradle2)
 }
 
