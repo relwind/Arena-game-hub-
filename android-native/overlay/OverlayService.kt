@@ -535,15 +535,16 @@ class OverlayService : Service() {
         val input = view.findViewById<EditText>(R.id.arenaChatInput)
         val send = {
             val text = input.text.toString().trim()
-            if (text.isNotEmpty() && sessionId.isNotEmpty()) {
+            if (text.isNotEmpty()) {
                 input.setText("")
-                val body = JSONObject().put("session_id", sessionId).put("user_id", userId).put("body", text)
-                BubbleHttp.insertRow(supabaseUrl, supabaseKey, accessToken, "live_chat", body) { ok ->
-                    if (!ok) handler.post { toast("Message non envoyé (le live est-il bien en cours ?)") }
+                val table = if (mode == "room") "room_messages" else "match_messages"
+                val idField = if (mode == "room") "room_id" else "match_id"
+                val idValue = if (mode == "room") roomId else matchId
+                val body = JSONObject().put(idField, idValue).put("user_id", userId).put("body", text)
+                BubbleHttp.insertRow(supabaseUrl, supabaseKey, accessToken, table, body) { ok ->
+                    if (!ok) handler.post { toast("Message non envoyé, réessaie.") }
                     loadChat(view, force = true)
                 }
-            } else if (sessionId.isEmpty()) {
-                toast("Démarrez le live pour pouvoir discuter.")
             }
         }
         view.findViewById<View>(R.id.arenaChatSend).setOnClickListener { send() }
@@ -583,19 +584,11 @@ class OverlayService : Service() {
     private fun stopChatPoll() { chatPoll?.let { handler.removeCallbacks(it) }; chatPoll = null }
 
     private fun loadChat(view: View, force: Boolean) {
-        if (sessionId.isEmpty()) {
-            handler.post {
-                val list = view.findViewById<LinearLayout>(R.id.arenaChatList)
-                if (list.childCount == 0) {
-                    val tv = TextView(this)
-                    tv.setTextColor(0xFF8A98BF.toInt()); tv.textSize = 12.5f
-                    tv.text = "Démarrez le live pour ouvrir la discussion."
-                    list.addView(tv)
-                }
-            }
-            return
-        }
-        val query = "live_chat?session_id=eq.$sessionId&select=user_id,body,created_at&order=created_at.asc&limit=50"
+        val table = if (mode == "room") "room_messages" else "match_messages"
+        val idField = if (mode == "room") "room_id" else "match_id"
+        val idValue = if (mode == "room") roomId else matchId
+        if (idValue.isEmpty()) return
+        val query = "$table?$idField=eq.$idValue&select=user_id,body,created_at&order=created_at.asc&limit=50"
         BubbleHttp.selectRows(supabaseUrl, supabaseKey, accessToken, query) { rows ->
             if (rows == null) return@selectRows
             resolveNames(rows) {
