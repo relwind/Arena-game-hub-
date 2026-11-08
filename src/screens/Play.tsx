@@ -33,7 +33,7 @@ export function Play() {
       <div className="sec"><h3>Jeu</h3></div>
       <div className="item" style={{ cursor: 'default' }}>
         <GameArt size={54} />
-        <div className="grow"><b>eFootball</b><div className="small muted">Mobile · 1v1 · 2v2</div></div>
+        <div className="grow"><b>eFootball</b><div className="small muted">Mobile · 1v1</div></div>
       </div>
       <div className="card small muted" style={{ marginTop: 12 }}>
         Bientôt dans Arena : FIFA 24, Free Fire, Call of Duty Mobile, PUBG Mobile, Rocket League. Pour le lancement, Arena se concentre sur eFootball.
@@ -44,7 +44,6 @@ export function Play() {
 
 export function RoomCreate() {
   const { me, nav, toast } = useApp()
-  const [mode, setMode] = useState('1v1')
   const [rules, setRules] = useState('')
   const [live, setLive] = useState('all')
   const [inv, setInv] = useState<string[]>([])
@@ -55,7 +54,7 @@ export function RoomCreate() {
   const go = async () => {
     setBusy(true); setErr('')
     try {
-      const r = await rpc('create_friendly_room', { _mode: mode, _rules: rules.trim() || null, _live_audience: live, _invite: inv })
+      const r = await rpc('create_friendly_room', { _mode: '1v1', _rules: rules.trim() || null, _live_audience: live, _invite: inv })
       toast('Salle créée')
       nav.replace('room', { id: rid(r) })
     } catch (e: any) { setErr(errMsg(e)); setBusy(false) }
@@ -67,8 +66,7 @@ export function RoomCreate() {
     <section className="screen">
       <Top title="Créer une salle" />
       <div className="stack">
-        <div><div className="small muted" style={{ marginBottom: 6 }}>Jeu</div><div className="in">eFootball</div></div>
-        <div><div className="small muted" style={{ marginBottom: 6 }}>Mode</div>{seg([['1v1', '1v1'], ['2v2', '2v2']], mode, setMode)}</div>
+        <div><div className="small muted" style={{ marginBottom: 6 }}>Jeu</div><div className="in">eFootball · 1v1</div></div>
         <div>
           <div className="small muted" style={{ marginBottom: 6 }}>Inviter des amis</div>
           {!friends ? <div className="small muted">…</div> : !fr.length ? <div className="small muted">Aucun ami pour le moment. Ajoute-en via Recherche.</div> : (
