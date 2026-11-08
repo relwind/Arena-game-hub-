@@ -96,6 +96,7 @@ export function MatchRoom({ id }: { id: string }) {
     const a = Number(sa), b = Number(sb_)
     if (sa === '' || sb_ === '' || !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) return setErr('Entre les deux scores.')
     if (a === b) return setErr("Égalité impossible : indique le score final (prolongation ou tirs au but).")
+    if (!cap) return setErr("La capture d'écran du score final est obligatoire en compétition.")
     act(async () => {
       const proof = cap ? await uploadProof(id, me.id, cap) : null
       await rpc('submit_result', { _match: id, _sa: a, _sb: b, _proof: proof })
@@ -210,12 +211,12 @@ export function MatchRoom({ id }: { id: string }) {
                 <label className="f grow">{A}<input className="in" type="number" inputMode="numeric" min={0} value={sa} onChange={(e) => setSa(e.target.value)} /></label>
                 <label className="f grow">{B}<input className="in" type="number" inputMode="numeric" min={0} value={sb_} onChange={(e) => setSb(e.target.value)} /></label>
               </div>
-              <label className="btn ghost" style={{ textAlign: 'center', cursor: 'pointer' }}>
-                {cap ? 'Capture ajoutée : ' + cap.name.slice(0, 22) : "Ajouter la capture d'écran du score final"}
+              <label className="btn ghost" style={{ textAlign: 'center', cursor: 'pointer', borderColor: cap ? undefined : 'var(--live)' }}>
+                {cap ? '✓ Capture ajoutée : ' + cap.name.slice(0, 22) : "Ajouter la capture d'écran du score final (obligatoire)"}
                 <input type="file" accept="image/*" hidden onChange={(e) => setCap(e.target.files?.[0] || null)} />
               </label>
-              <div className="small muted">Envoie le score affiché par le jeu et, si possible, une capture : elle aide l'organisateur en cas de désaccord. Les deux scores identiques valident le match automatiquement.</div>
-              <button className="btn" disabled={busy} onClick={submitScore}>Envoyer le score</button>
+              <div className="small muted">La capture doit montrer l'écran de fin de partie complet, avec les deux pseudos visibles. Les deux scores identiques valident le match automatiquement.</div>
+              <button className="btn" disabled={busy || !cap} onClick={submitScore}>Envoyer le score</button>
             </>
           )}
           <div className="row">
