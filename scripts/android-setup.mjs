@@ -156,4 +156,14 @@ if (!mainActivity.includes('ArenaOverlayPlugin')) {
   fs.writeFileSync(mainActivityPath, patched)
 }
 
+// Le wrapper Gradle généré par Capacitor a un délai réseau par défaut trop
+// court (10 s) pour télécharger la distribution complète sur le réseau du
+// CI, ce qui provoque des échecs de build aléatoires (timeout). On utilise
+// la distribution "-bin" (bien plus légère) et on allonge le délai.
+const wrapperPath = 'android/gradle/wrapper/gradle-wrapper.properties'
+let wrapper = fs.readFileSync(wrapperPath, 'utf8')
+wrapper = wrapper.replace(/-all\.zip/, '-bin.zip')
+if (!wrapper.includes('networkTimeout')) wrapper += 'networkTimeout=120000\n'
+fs.writeFileSync(wrapperPath, wrapper)
+
 console.log('Identité Arena appliquée, bulle flottante installée.')
