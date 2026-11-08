@@ -179,15 +179,6 @@ export function MatchRoom({ id }: { id: string }) {
                   </button>
                 </div>
               )}
-              {m.ready_both_at && !m.host_id && (
-                <>
-                  <div className="small">Qui crée la salle dans eFootball ? (sinon, {A} sera hôte dans 2 minutes)</div>
-                  <div className="row">
-                    <button className="btn ghost" disabled={busy} onClick={() => act(() => rpc('choose_host', { _match: id, _host: me.id }))}>Moi</button>
-                    <button className="btn ghost" disabled={busy} onClick={() => act(() => rpc('choose_host', { _match: id, _host: oppId }))}>Mon adversaire</button>
-                  </div>
-                </>
-              )}
               {m.host_id && (
                 <>
                   <div className="small">Hôte : <b>{m.host_id === me.id ? 'toi' : names[m.host_id]}</b></div>
