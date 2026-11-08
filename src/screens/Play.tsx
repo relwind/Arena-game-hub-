@@ -260,7 +260,7 @@ export function RoomPlay({ id }: { id: string }) {
           <Av name={names[opp[0]?.user_id]} size={50} />
         </div>
       </div>
-      {!closed && overlayAvailable() && (
+      {!closed && (overlayAvailable() ? (
         <div className="card small stack" style={{ marginBottom: 10, borderColor: bubbleLive ? 'var(--live)' : 'var(--gold)' }}>
           <b>{bubbleLive ? '🔴 Live en cours' : 'Bulle flottante'}</b>
           <div className="muted">
@@ -272,7 +272,9 @@ export function RoomPlay({ id }: { id: string }) {
             {bubbleShown ? 'Fermer la bulle' : 'Ouvrir la bulle flottante'}
           </button>
         </div>
-      )}
+      ) : (
+        <div className="small muted" style={{ marginBottom: 10 }}>🫧 La bulle flottante n'est disponible que dans l'application Android installée (pas dans un navigateur).</div>
+      ))}
       {!closed && <button className="btn ghost" style={{ marginBottom: 10 }} onClick={() => openEfootball(toast)}>Ouvrir le jeu directement</button>}
       <div className="card small muted" style={{ marginBottom: 10 }}>Joue ta partie dans eFootball avec le code de salle, puis reviens ici pour la terminer.</div>
       <div className="stack">

@@ -167,7 +167,11 @@ export function MatchRoom({ id }: { id: string }) {
                 <span className={'badge ' + (oppReady ? 'b-ok' : 'b-wait')}>Adversaire : {oppReady ? 'prêt' : 'pas prêt'}</span>
               </div>
               {!myReady && <button className="btn" disabled={busy} onClick={() => act(() => rpc('set_ready', { _match: id }), 'Tu es prêt')}>Je suis prêt</button>}
-              {m.ready_both_at && overlayAvailable() && (
+              {!overlayAvailable() ? (
+                <div className="small muted">🫧 La bulle flottante n'est disponible que dans l'application Android installée (pas dans un navigateur).</div>
+              ) : !m.ready_both_at ? (
+                <div className="small muted">🫧 La bulle flottante sera proposée dès que vous serez prêts tous les deux.</div>
+              ) : (
                 <div className="card small stack" style={{ borderColor: bubbleLive ? 'var(--live)' : 'var(--gold)' }}>
                   <b>{bubbleLive ? '🔴 Live en cours' : 'Bulle flottante'}</b>
                   <div className="muted">
