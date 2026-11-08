@@ -78,6 +78,7 @@ class OverlayService : Service() {
     private var menuView: View? = null
     private var chatView: View? = null
     private var statusView: View? = null
+    private var alertView: View? = null
 
     private var sessionId: String = ""
     private var matchId: String = ""
@@ -223,6 +224,15 @@ class OverlayService : Service() {
             removeView(menuView); menuView = null
             toggleChat()
         }
+        val organizerBtn = view.findViewById<View>(R.id.arenaBtnOrganizer)
+        if (mode == "room") {
+            organizerBtn.visibility = View.GONE // pas d'organisateur en match amical
+        } else {
+            organizerBtn.setOnClickListener {
+                removeView(menuView); menuView = null
+                toggleAlert()
+            }
+        }
         view.findViewById<View>(R.id.arenaBtnClose).setOnClickListener {
             removeView(menuView); menuView = null
             stopEverything()
@@ -246,6 +256,39 @@ class OverlayService : Service() {
     private fun removeView(v: View?) {
         if (v == null) return
         try { wm.removeView(v) } catch (_: Exception) {}
+    }
+
+    // ---------------------------------------------------------------- contacter l'organisateur (compétition uniquement)
+
+    private fun toggleAlert() {
+        if (alertView != null) { removeView(alertView); alertView = null; return }
+        val inflater = LayoutInflater.from(this)
+        val view = inflater.inflate(R.layout.arena_alert, null)
+        alertView = view
+
+        view.findViewById<View>(R.id.arenaAlertClose).setOnClickListener { removeView(alertView); alertView = null }
+        view.findViewById<View>(R.id.arenaAlertSend).setOnClickListener {
+            val input = view.findViewById<EditText>(R.id.arenaAlertInput)
+            val text = input.text.toString().trim()
+            if (text.isEmpty()) { toast("Écris un message."); return@setOnClickListener }
+            if (matchId.isEmpty()) { toast("Aucun match associé."); return@setOnClickListener }
+            BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "alert_organizer", JSONObject().put("_match", matchId).put("_body", text)) { res ->
+                handler.post {
+                    if (res == null) toast("Message non envoyé, réessaie.")
+                    else { toast("Organisateur prévenu."); removeView(alertView); alertView = null }
+                }
+            }
+        }
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType(), 0, PixelFormat.TRANSLUCENT
+        )
+        params.gravity = Gravity.TOP or Gravity.START
+        val bp = bubbleParams
+        params.x = ((bp?.x ?: 0) - 270).coerceAtLeast(10)
+        params.y = bp?.y ?: 200
+        wm.addView(view, params)
     }
 
     /** Avant le lancement de la partie : écran d'état (hôte / attente / code). Après : menu habituel. */
@@ -645,6 +688,7 @@ class OverlayService : Service() {
         removeView(chatView); chatView = null
         removeView(menuView); menuView = null
         removeView(statusView); statusView = null
+        removeView(alertView); alertView = null
         removeView(bubbleView); bubbleView = null
         isRunning = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") stopForeground(true)
