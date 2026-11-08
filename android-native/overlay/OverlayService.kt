@@ -431,7 +431,7 @@ class OverlayService : Service() {
             }
             hostId == userId && roomCode == null -> {
                 title.text = "Tu es l'hôte"
-                body.text = "Crée la salle dans eFootball, puis colle ici le code à donner à ton adversaire."
+                body.text = "Crée la salle dans eFootball, puis colle ici le code à donner à ton adversaire.\n\nPense à activer le live si tu veux — la capture d'écran sera obligatoire à la fin du match."
                 input.visibility = View.VISIBLE
                 primary.text = "Envoyer le code"
                 primary.visibility = View.VISIBLE

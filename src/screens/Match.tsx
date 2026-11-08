@@ -183,6 +183,23 @@ export function MatchRoom({ id }: { id: string }) {
               {m.host_id && (
                 <>
                   <div className="small">Hôte : <b>{m.host_id === me.id ? 'toi' : names[m.host_id]}</b></div>
+                  {!room?.room_code && m.host_chosen_at && (() => {
+                    const deadline = new Date(m.host_chosen_at).getTime() + 5 * 60000
+                    const leftMs = deadline - Date.now()
+                    const late = leftMs <= 0
+                    const mm = Math.max(0, Math.floor(leftMs / 60000))
+                    const ss = Math.max(0, Math.floor((leftMs % 60000) / 1000))
+                    return (
+                      <div className="card small stack" style={{ borderColor: late ? 'var(--live)' : 'var(--gold)' }}>
+                        <div style={{ color: late ? 'var(--live)' : undefined }}>
+                          {late
+                            ? "Délai dépassé : si le souci persiste, utilise « Contacter l'organisateur » dans la bulle."
+                            : `Temps pour créer la salle et envoyer le code : ${mm}:${String(ss).padStart(2, '0')}`}
+                        </div>
+                        <div className="muted">Pense à activer le live si tu veux — la capture d'écran sera obligatoire à la fin du match.</div>
+                      </div>
+                    )
+                  })()}
                   {room?.room_code && <div className="card small" style={{ borderColor: 'var(--gold)' }}>Code de la salle eFootball : <b className="arena-id">{room.room_code}</b></div>}
                   {m.host_id === me.id && !room?.room_code && (
                     <div className="row">
