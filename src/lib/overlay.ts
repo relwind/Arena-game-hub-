@@ -19,6 +19,7 @@ interface ArenaOverlayPlugin {
   isBubbleShown(): Promise<{ shown: boolean; live: boolean }>
   addListener(eventName: 'liveStateChanged', cb: (data: { live: boolean }) => void): any
   addListener(eventName: 'screenshotTaken', cb: (data: { path: string }) => void): any
+  addListener(eventName: 'endRequested', cb: (data: { matchId: string; roomId: string; mode: 'match' | 'room' }) => void): any
 }
 
 const ArenaOverlay = registerPlugin<ArenaOverlayPlugin>('ArenaOverlay')
@@ -64,6 +65,22 @@ export async function arenaBubbleStatus() {
 export function onArenaLiveStateChanged(cb: (live: boolean) => void) {
   if (!overlayAvailable()) return { remove: () => {} }
   const handle: any = ArenaOverlay.addListener('liveStateChanged', (d) => cb(d.live))
+  return {
+    remove: () => {
+      if (typeof handle?.remove === 'function') handle.remove()
+      else if (typeof handle?.then === 'function') handle.then((h: any) => h.remove())
+    },
+  }
+}
+
+/**
+ * Appelé quand le joueur appuie sur « Terminer » dans la bulle : le live est déjà
+ * arrêté et la bulle fermée côté natif, il ne reste qu'à amener l'app au premier
+ * plan sur le bon écran (géré au niveau de App.tsx, pas écran par écran).
+ */
+export function onArenaEndRequested(cb: (data: { matchId: string; roomId: string; mode: 'match' | 'room' }) => void) {
+  if (!overlayAvailable()) return { remove: () => {} }
+  const handle: any = ArenaOverlay.addListener('endRequested', cb)
   return {
     remove: () => {
       if (typeof handle?.remove === 'function') handle.remove()

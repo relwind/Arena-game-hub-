@@ -233,6 +233,10 @@ class OverlayService : Service() {
                 toggleAlert()
             }
         }
+        view.findViewById<View>(R.id.arenaBtnEnd).setOnClickListener {
+            removeView(menuView); menuView = null
+            endAndReturnToArena()
+        }
         view.findViewById<View>(R.id.arenaBtnClose).setOnClickListener {
             removeView(menuView); menuView = null
             stopEverything()
@@ -470,6 +474,25 @@ class OverlayService : Service() {
         } catch (e: Exception) {
             toast("Impossible d'ouvrir eFootball.")
         }
+    }
+
+    /** Bouton « Terminer » : arrête le live, ramène Arena au premier plan directement sur la saisie du score, puis ferme la bulle. */
+    private fun endAndReturnToArena() {
+        if (isLive) stopLive()
+        try {
+            val launch = packageManager.getLaunchIntentForPackage(packageName)
+            if (launch != null) {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                startActivity(launch)
+            }
+        } catch (e: Exception) {
+            toast("Impossible de revenir sur Arena.")
+        }
+        pluginRef?.emit(
+            "endRequested",
+            JSObject().put("matchId", matchId).put("roomId", roomId).put("mode", mode)
+        )
+        stopEverything()
     }
 
     // ---------------------------------------------------------------- live (capture d'écran + signal serveur)

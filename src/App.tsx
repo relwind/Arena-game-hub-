@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { App as CapApp } from '@capacitor/app'
 import { startPush } from './lib/push'
+import { onArenaEndRequested } from './lib/overlay'
 import { sb } from './lib/supabase'
 import { Ctx, Route, Spin, q } from './lib/ui'
 import { Splash, Login, Signup, Verify, OnbProfile, OnbPrefs, Valid } from './screens/Auth'
@@ -90,6 +91,16 @@ export default function App() {
     replace: (name: string, p?: any) => setStack((s) => [...s.slice(0, -1), { name, p }]),
     tab: (name: string) => setStack([{ name }]),
   }
+
+  const navRef = useRef<any>(null)
+  navRef.current = nav
+  useEffect(() => {
+    const sub = onArenaEndRequested(({ matchId, roomId, mode }) => {
+      if (mode === 'room' && roomId) navRef.current?.go('rplay', { id: roomId })
+      else if (matchId) navRef.current?.go('match', { id: matchId })
+    })
+    return () => sub.remove()
+  }, [])
 
   const stackRef = useRef(stack)
   stackRef.current = stack
