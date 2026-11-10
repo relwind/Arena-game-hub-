@@ -355,6 +355,32 @@ class OverlayService : Service() {
 
         view.findViewById<View>(R.id.arenaStatusClose).setOnClickListener { removeView(statusView); statusView = null }
 
+        // « Ouvrir eFootball » : ouvre TOUJOURS le jeu pour celui qui clique, sans aucun autre effet.
+        // Chez l'hôte avant invitation, ça lui sert juste à aller créer la salle.
+        // Chez l'adversaire, ce bouton n'est même affiché que s'il a été explicitement invité (voir renderStatus).
+        view.findViewById<View>(R.id.arenaStatusOpenGame).setOnClickListener {
+            val isHost = hostId == userId
+            if (!isHost && mode == "match" && kickedAt == null) {
+                BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "mark_kicked", JSONObject().put("_match", matchId)) {
+                    kickedAt = kickedAt ?: java.util.Date().toString()
+                    refreshMatchState()
+                }
+            }
+            if (mode == "room") roomOpened = true
+            openEfootball()
+            removeView(statusView); statusView = null
+        }
+        // « Faire venir mon adversaire » : action explicite et séparée de l'hôte, indépendante du code.
+        // Tant que l'hôte n'a pas cliqué ça, l'adversaire ne voit aucun bouton pour ouvrir eFootball,
+        // même si le code de la salle est déjà arrivé dans le chat.
+        view.findViewById<View>(R.id.arenaStatusNotify).setOnClickListener {
+            val fn = if (mode == "room") "invite_to_room_friendly" else "invite_to_room"
+            val arg = if (mode == "room") "_room" to roomId else "_match" to matchId
+            BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, fn, JSONObject().put(arg.first, arg.second)) {
+                handler.post { toast("Ton adversaire a été prévenu.") }
+                refreshMatchState()
+            }
+        }
         view.findViewById<View>(R.id.arenaStatusPrimary).setOnClickListener {
             val input = view.findViewById<EditText>(R.id.arenaStatusInput)
             val code = input.text.toString().trim()
@@ -368,31 +394,6 @@ class OverlayService : Service() {
                     refreshMatchState()
                 }
             }
-        }
-        // « Ouvrir eFootball » : accessible dès que l'hôte a sa salle prête (code ou simple invitation),
-        // et pour l'adversaire dès qu'il est invité ou que le code est arrivé.
-        view.findViewById<View>(R.id.arenaStatusOpenGame).setOnClickListener {
-            val isHost = hostId == userId
-            if (mode == "room") {
-                if (isHost) {
-                    BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "invite_to_room_friendly", JSONObject().put("_room", roomId)) { refreshMatchState() }
-                }
-                roomOpened = true
-                openEfootball()
-                removeView(statusView); statusView = null
-                return@setOnClickListener
-            }
-            if (isHost && invitedAt == null) {
-                BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "invite_to_room", JSONObject().put("_match", matchId)) { refreshMatchState() }
-            }
-            if (roomCode != null && kickedAt == null) {
-                BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, "mark_kicked", JSONObject().put("_match", matchId)) {
-                    kickedAt = kickedAt ?: java.util.Date().toString()
-                    refreshMatchState()
-                }
-            }
-            openEfootball()
-            removeView(statusView); statusView = null
         }
         view.findViewById<View>(R.id.arenaStatusSecondary).setOnClickListener {
             val code = roomCode
@@ -422,29 +423,30 @@ class OverlayService : Service() {
         val secondary = view.findViewById<TextView>(R.id.arenaStatusSecondary)
         val primary = view.findViewById<TextView>(R.id.arenaStatusPrimary)
         val openGame = view.findViewById<TextView>(R.id.arenaStatusOpenGame)
-        input.visibility = View.GONE; secondary.visibility = View.GONE; primary.visibility = View.GONE; openGame.visibility = View.GONE
+        val notify = view.findViewById<TextView>(R.id.arenaStatusNotify)
+        input.visibility = View.GONE; secondary.visibility = View.GONE; primary.visibility = View.GONE
+        openGame.visibility = View.GONE; notify.visibility = View.GONE
         val isHost = hostId != null && hostId == userId
 
         if (mode == "room") {
-            if (roomCode == null && isHost) {
+            if (isHost) {
                 title.text = "Tu es l'hôte"
-                body.text = "Crée la salle dans eFootball (ou ouvre-la directement d'ici), puis colle ici le code pour ton adversaire.\n\nNote : pense à lui transmettre le code dans le chat de la bulle."
+                body.text = (if (roomCode != null) "Code envoyé : $roomCode\n\n" else "") +
+                    "Ouvre eFootball pour créer la salle. Une fois prêt, clique « Faire venir mon adversaire » pour qu'il puisse venir — ça marche même si tu ne lui envoies jamais le code."
+                openGame.visibility = View.VISIBLE
+                notify.visibility = View.VISIBLE
+                notify.text = if (invitedAt != null) "✓ Adversaire prévenu" else "Faire venir mon adversaire"
                 input.visibility = View.VISIBLE
-                primary.text = "Envoyer le code"
                 primary.visibility = View.VISIBLE
+                if (roomCode != null) secondary.visibility = View.VISIBLE
+            } else if (invitedAt != null) {
+                title.text = "Tu peux y aller"
+                body.text = if (roomCode != null) "Ton coéquipier t'attend. Code de la salle (facultatif) : $roomCode" else "Ton coéquipier t'attend dans la salle qu'il a créée."
                 openGame.visibility = View.VISIBLE
-            } else if (roomCode == null && invitedAt != null) {
-                title.text = "Salle prête"
-                body.text = "Ton coéquipier a créé la salle, tu peux ouvrir eFootball. Le code arrivera ici dès qu'il sera envoyé."
-                openGame.visibility = View.VISIBLE
-            } else if (roomCode == null) {
-                title.text = "En attente"
-                body.text = "Ton coéquipier crée la salle dans eFootball. Patiente, le code apparaîtra ici."
+                if (roomCode != null) secondary.visibility = View.VISIBLE
             } else {
-                title.text = "Code reçu"
-                body.text = "Code de la salle : $roomCode"
-                secondary.visibility = View.VISIBLE
-                openGame.visibility = View.VISIBLE
+                title.text = "En attente"
+                body.text = "Ton coéquipier prépare la salle dans eFootball. Tu seras prévenu dès qu'il sera prêt à te faire venir."
             }
             return
         }
@@ -458,34 +460,26 @@ class OverlayService : Service() {
                 title.text = "En attente"
                 body.text = "En attente de la désignation de l'hôte par Arena…"
             }
-            isHost && roomCode == null -> {
+            isHost -> {
                 title.text = "Tu es l'hôte"
-                body.text = "Crée la salle dans eFootball (ou ouvre-la directement d'ici), puis colle ici le code pour ton adversaire.\n\nNote : pense à lui transmettre le code dans le chat de la bulle. Active le live si tu veux — la capture d'écran sera obligatoire à la fin du match."
+                body.text = (if (roomCode != null) "Code envoyé : $roomCode\n\n" else "") +
+                    "Ouvre eFootball pour créer la salle. Une fois prêt, clique « Faire venir mon adversaire » pour qu'il puisse venir — ça marche même si tu ne lui envoies jamais le code.\n\nActive le live si tu veux — la capture d'écran sera obligatoire à la fin du match."
+                openGame.visibility = View.VISIBLE
+                notify.visibility = View.VISIBLE
+                notify.text = if (invitedAt != null) "✓ Adversaire prévenu" else "Faire venir mon adversaire"
                 input.visibility = View.VISIBLE
-                primary.text = "Envoyer le code"
                 primary.visibility = View.VISIBLE
-                openGame.visibility = View.VISIBLE
+                if (roomCode != null) secondary.visibility = View.VISIBLE
             }
-            isHost && roomCode != null -> {
-                title.text = "Salle créée"
-                body.text = "Code envoyé à ton adversaire : $roomCode"
-                secondary.visibility = View.VISIBLE
+            invitedAt != null -> {
+                title.text = "Tu peux y aller"
+                body.text = if (roomCode != null) "Ton adversaire t'attend. Code de la salle (facultatif) : $roomCode" else "Ton adversaire t'attend dans la salle qu'il a créée."
                 openGame.visibility = View.VISIBLE
-            }
-            !isHost && roomCode == null && invitedAt != null -> {
-                title.text = "Salle prête"
-                body.text = "Ton adversaire a créé la salle, tu peux ouvrir eFootball. Le code arrivera ici dès qu'il sera envoyé."
-                openGame.visibility = View.VISIBLE
-            }
-            !isHost && roomCode == null -> {
-                title.text = "En attente du code"
-                body.text = "Ton adversaire crée la salle dans eFootball. Patiente, le code apparaîtra ici."
+                if (roomCode != null) secondary.visibility = View.VISIBLE
             }
             else -> {
-                title.text = "Code reçu"
-                body.text = "Code de la salle : $roomCode"
-                secondary.visibility = View.VISIBLE
-                openGame.visibility = View.VISIBLE
+                title.text = "En attente"
+                body.text = "Ton adversaire prépare la salle dans eFootball. Tu seras prévenu dès qu'il sera prêt à te faire venir."
             }
         }
     }
