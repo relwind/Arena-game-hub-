@@ -454,7 +454,8 @@ class OverlayService : Service() {
         when {
             kickedAt != null -> {
                 title.text = "Partie en cours"
-                body.text = "La partie a déjà été lancée. Ferme cet écran pour accéder au live et à la capture d'écran."
+                body.text = (if (isLive) "🔴 Live en cours.\n\n" else "") +
+                    "La partie a été lancée. Ferme cet écran pour accéder au menu (live, capture d'écran, chat).\n\nLa capture d'écran du score final sera obligatoire pour valider le match."
             }
             hostId == null -> {
                 title.text = "En attente"
