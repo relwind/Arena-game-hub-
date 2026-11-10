@@ -73,6 +73,11 @@ class ArenaOverlayPlugin : Plugin() {
         if (!Settings.canDrawOverlays(context)) {
             call.reject("overlay_permission_missing"); return
         }
+        // La bulle ne sert qu'à accompagner une partie eFootball : pas la peine de l'ouvrir
+        // (et de demander des permissions) si le jeu n'est même pas installé sur l'appareil.
+        if (context.packageManager.getLaunchIntentForPackage("jp.konami.pesam") == null) {
+            call.reject("efootball_not_installed"); return
+        }
         val intent = Intent(context, OverlayService::class.java).apply {
             action = OverlayService.ACTION_START
             putExtra("sessionId", call.getString("sessionId", ""))

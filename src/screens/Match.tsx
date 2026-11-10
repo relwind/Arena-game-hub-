@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { sb, SUPABASE_URL, SUPABASE_KEY } from '../lib/supabase'
 import { uploadProof, ProofLink } from '../lib/img'
-import { useApp, useLoad, q, rpc, fmt, hhmm, leftTxt, Top, Spin, ErrBox, errMsg, namesOf, GameArt } from '../lib/ui'
+import { useApp, useLoad, q, rpc, fmt, hhmm, leftTxt, Top, Spin, ErrBox, errMsg, namesOf, GameArt, efootballInstalled } from '../lib/ui'
 import { overlayAvailable, startArenaBubble, stopArenaBubble, arenaBubbleStatus, onArenaLiveStateChanged } from '../lib/overlay'
 
 export function MatchRoom({ id }: { id: string }) {
@@ -27,6 +27,7 @@ export function MatchRoom({ id }: { id: string }) {
 
   const toggleBubble = async () => {
     if (bubbleShown) { await stopArenaBubble(); setBubbleShown(false); setBubbleLive(false); return }
+    if (!(await efootballInstalled())) return setErr("eFootball n'est pas installé sur cet appareil — installe-le d'abord pour utiliser la bulle.")
     try {
       const { data: s } = await sb.auth.getSession()
       const token = s.session?.access_token
@@ -45,6 +46,7 @@ export function MatchRoom({ id }: { id: string }) {
       if (e.message === 'not_native') setErr("La bulle flottante n'est disponible que dans l'application Android.")
       else if (e.message === 'overlay_denied') setErr("Autorisation « Affichage par-dessus les autres apps » refusée : la bulle ne peut pas s'ouvrir.")
       else if (e.message === 'projection_denied') setErr("Autorisation de capture d'écran refusée : le live ne pourra pas démarrer.")
+      else if (e.message === 'efootball_not_installed') setErr("eFootball n'est pas installé sur ce téléphone : installe-le avant d'ouvrir la bulle.")
       else setErr(errMsg(e))
     }
   }
@@ -220,7 +222,7 @@ export function MatchRoom({ id }: { id: string }) {
         </div>
       )}
 
-      {player && !decided && m.player_a && m.player_b && !preMatch && (
+      {player && !decided && m.player_a && m.player_b && m.kicked_at && (
         <div className="card stack mt">
           <b>Score final</b>
           {myResult ? (
@@ -240,10 +242,6 @@ export function MatchRoom({ id }: { id: string }) {
               <button className="btn" disabled={busy || !cap} onClick={submitScore}>Envoyer le score</button>
             </>
           )}
-          <div className="row">
-            <button className="btn ghost" disabled={busy} onClick={() => act(() => rpc('report_disconnect', { _match: id }), 'Déconnexion signalée : 5 minutes pour revenir')}>J'ai perdu la connexion</button>
-            <button className="btn ghost" disabled={busy} onClick={() => act(() => rpc('report_return', { _match: id }), 'Content de te revoir')}>Je suis revenu</button>
-          </div>
         </div>
       )}
 

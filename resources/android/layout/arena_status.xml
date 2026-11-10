@@ -79,4 +79,17 @@
         android:visibility="gone"
         android:text="Envoyer" />
 
+    <TextView
+        android:id="@+id/arenaStatusOpenGame"
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/arena_ghost_btn_bg"
+        android:gravity="center"
+        android:textColor="#E8EEFF"
+        android:textStyle="bold"
+        android:textSize="13.5sp"
+        android:visibility="gone"
+        android:text="Ouvrir eFootball" />
+
 </LinearLayout>

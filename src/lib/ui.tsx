@@ -159,3 +159,15 @@ export async function openEfootball(toast: (t: string) => void) {
     toast("Impossible d'ouvrir eFootball : vérifie qu'il est installé.")
   }
 }
+
+// Vérifie qu'eFootball est bien installé avant de proposer la bulle flottante :
+// inutile de l'ouvrir si le joueur n'a même pas le jeu sur son téléphone.
+export async function efootballInstalled(): Promise<boolean> {
+  try {
+    const { AppLauncher } = await import('@capacitor/app-launcher')
+    const r = await AppLauncher.canOpenUrl({ url: 'jp.konami.pesam' })
+    return !!r.value
+  } catch {
+    return true // on ne bloque jamais si la vérification elle-même échoue
+  }
+}
