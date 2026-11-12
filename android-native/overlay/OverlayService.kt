@@ -35,6 +35,12 @@ import android.widget.TextView
 import android.widget.Toast
 import app.arena.gamehub.R
 import com.getcapacitor.JSObject
+import io.livekit.android.LiveKit
+import io.livekit.android.room.Room
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -94,6 +100,11 @@ class OverlayService : Service() {
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
+
+    // Diffusion vidéo réelle vers LiveKit Cloud (en plus de la capture locale
+    // ci-dessus, qui sert uniquement au bouton « Capture d'écran »).
+    private var liveKitRoom: Room? = null
+    private val liveKitScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var chatPoll: Runnable? = null
     private val nameCache = HashMap<String, String>()
@@ -555,11 +566,50 @@ class OverlayService : Service() {
                     handler.post { toast("Le live a démarré localement, mais le serveur n'a pas confirmé.") }
                 } else {
                     sessionId = newId
+                    connectLiveKit(newId, data)
                 }
             }
             pluginRef?.emit("liveStateChanged", JSObject().put("live", true))
         } catch (e: Exception) {
             toast("Impossible de démarrer le live : ${e.message}")
+        }
+    }
+
+    /** Récupère un jeton LiveKit auprès du serveur Arena, puis publie l'écran capturé ci-dessus comme flux vidéo. */
+    private fun connectLiveKit(sid: String, projectionData: Intent) {
+        BubbleHttp.edgeFunction(
+            supabaseUrl, supabaseKey, accessToken, "livekit-token",
+            JSONObject().put("session", sid).put("publish", true).put("displayName", displayName)
+        ) { text ->
+            val json = text?.let { try { JSONObject(it) } catch (e: Exception) { null } }
+            val url = json?.optString("url")
+            val tok = json?.optString("token")
+            if (url.isNullOrEmpty() || tok.isNullOrEmpty()) {
+                handler.post { toast("Diffusion vidéo indisponible pour l'instant (jeton refusé).") }
+                return@edgeFunction
+            }
+            liveKitScope.launch {
+                try {
+                    val r = LiveKit.create(applicationContext)
+                    liveKitRoom = r
+                    r.connect(url, tok)
+                    r.localParticipant.setScreenShareEnabled(true, projectionData)
+                    toast("Diffusion vidéo en direct active.")
+                } catch (e: Exception) {
+                    toast("Connexion vidéo impossible : ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun disconnectLiveKit() {
+        val r = liveKitRoom
+        liveKitRoom = null
+        if (r != null) {
+            liveKitScope.launch {
+                try { r.localParticipant.setScreenShareEnabled(false, null) } catch (_: Exception) {}
+                try { r.disconnect() } catch (_: Exception) {}
+            }
         }
     }
 
@@ -569,6 +619,7 @@ class OverlayService : Service() {
         try { mediaProjection?.stop() } catch (_: Exception) {}
         try { imageReader?.close() } catch (_: Exception) {}
         virtualDisplay = null; mediaProjection = null; imageReader = null
+        disconnectLiveKit()
         bubbleView?.findViewById<TextView>(R.id.arenaBubbleFace)?.setBackgroundResource(R.drawable.arena_bubble_bg)
         toast("Live arrêté")
         val stopFn = if (mode == "room") "stop_room_live" else "stop_live"

@@ -48,6 +48,14 @@ object BubbleHttp {
         }
     }
 
+    /** Appelle une edge function Supabase (ex: livekit-token). onResult reçoit le JSON brut renvoyé. */
+    fun edgeFunction(baseUrl: String, apiKey: String, accessToken: String, slug: String, body: JSONObject, onResult: (String?) -> Unit) {
+        run {
+            val text = postJson("$baseUrl/functions/v1/$slug", apiKey, accessToken, body, preferMinimal = false)
+            onResult(text)
+        }
+    }
+
     private fun postJson(urlStr: String, apiKey: String, accessToken: String, body: JSONObject, preferMinimal: Boolean): String? {
         return try {
             val url = URL(urlStr)

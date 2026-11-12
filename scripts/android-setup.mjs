@@ -106,6 +106,25 @@ if (!appGradle2.includes('kotlin-android')) {
   fs.writeFileSync(appGradlePath, appGradle2)
 }
 
+// --- LiveKit (diffusion vidéo réelle du live) --------------------------------
+let appGradle3 = fs.readFileSync(appGradlePath, 'utf8')
+if (!appGradle3.includes('io.livekit:livekit-android')) {
+  appGradle3 = appGradle3.replace(
+    /dependencies\s*\{/,
+    `dependencies {\n    implementation "io.livekit:livekit-android:2.30.0"`
+  )
+  // Plusieurs bibliothèques (dont le WebRTC embarqué par LiveKit) peuvent toutes
+  // fournir leur propre libc++_shared.so : sans ça, la fusion des .so échoue au
+  // moment de l'empaquetage de l'APK.
+  if (!appGradle3.includes('packagingOptions')) {
+    appGradle3 = appGradle3.replace(
+      /android\s*\{/,
+      `android {\n    packagingOptions {\n        pickFirst "**/libc++_shared.so"\n        pickFirst "**/libjsc.so"\n    }`
+    )
+  }
+  fs.writeFileSync(appGradlePath, appGradle3)
+}
+
 // --- Bulle flottante (live, capture d'écran, chat) --------------------------
 const overlayPkgDir = 'android/app/src/main/java/app/arena/overlay'
 fs.mkdirSync(overlayPkgDir, { recursive: true })
