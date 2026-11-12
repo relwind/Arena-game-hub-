@@ -107,6 +107,16 @@ if (!appGradle2.includes('kotlin-android')) {
 }
 
 // --- LiveKit (diffusion vidéo réelle du live) --------------------------------
+// LiveKit dépend de quelques bibliothèques (ex: audioswitch) publiées sur
+// JitPack et non sur Maven Central : il faut ajouter ce dépôt partout où
+// Gradle résout les dépendances (buildscript ET allprojects), sinon le build
+// échoue avec "Could not find com.github.davidliu:audioswitch:...".
+let rootGradle3 = fs.readFileSync(rootGradlePath, 'utf8')
+if (!rootGradle3.includes('jitpack.io')) {
+  rootGradle3 = rootGradle3.replace(/repositories\s*\{/g, "repositories {\n        maven { url 'https://jitpack.io' }")
+  fs.writeFileSync(rootGradlePath, rootGradle3)
+}
+
 let appGradle3 = fs.readFileSync(appGradlePath, 'utf8')
 if (!appGradle3.includes('io.livekit:livekit-android')) {
   appGradle3 = appGradle3.replace(
