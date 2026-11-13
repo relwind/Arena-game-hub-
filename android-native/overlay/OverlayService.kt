@@ -37,6 +37,7 @@ import app.arena.gamehub.R
 import com.getcapacitor.JSObject
 import io.livekit.android.LiveKit
 import io.livekit.android.room.Room
+import io.livekit.android.room.track.screencapture.ScreenCaptureParams
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -593,7 +594,7 @@ class OverlayService : Service() {
                     val r = LiveKit.create(applicationContext)
                     liveKitRoom = r
                     r.connect(url, tok)
-                    r.localParticipant.setScreenShareEnabled(true, projectionData)
+                    r.localParticipant.setScreenShareEnabled(true, ScreenCaptureParams(projectionData))
                     toast("Diffusion vidéo en direct active.")
                 } catch (e: Exception) {
                     toast("Connexion vidéo impossible : ${e.message}")
