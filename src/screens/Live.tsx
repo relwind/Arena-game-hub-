@@ -41,8 +41,16 @@ export function Watch({ id }: { id: string }) {
   const { me } = useApp()
   const [status, setStatus] = useState<'connecting' | 'waiting' | 'live' | 'ended' | 'error'>('connecting')
   const [err, setErr] = useState('')
+  // Les deux joueurs d'un match peuvent diffuser en même temps : on garde un flux
+  // vidéo par identité (= id du joueur côté Arena, utilisé comme identity LiveKit)
+  // et on permet de basculer entre eux, un peu comme un mode spectateur CoD/Free Fire.
+  const [feeds, setFeeds] = useState<string[]>([])
+  const [selected, setSelected] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const roomRef = useRef<any>(null)
+  const tracksRef = useRef<Record<string, any>>({})
+  const attachedRef = useRef<{ identity: string | null; track: any }>({ identity: null, track: null })
+  const selectedRef = useRef<string | null>(null)
 
   const { data } = useLoad(async () => {
     const s = await q<any>(sb.from('live_sessions').select('id,match_id,competition_id,status,started_at').eq('id', id).single())
@@ -50,6 +58,18 @@ export function Watch({ id }: { id: string }) {
     const names = m ? await namesOf([m.player_a, m.player_b]) : {}
     return { s, m, names }
   }, [id], 8000)
+
+  // Affiche le flux demandé dans la balise <video> : détache l'ancien, attache le nouveau.
+  const showFeed = (identity: string | null) => {
+    const el = videoRef.current
+    const prev = attachedRef.current
+    if (el && prev.track && prev.identity !== identity) { try { prev.track.detach(el) } catch { /* */ } }
+    const track = identity ? tracksRef.current[identity] : null
+    if (el && track) { try { track.attach(el) } catch { /* */ } }
+    attachedRef.current = { identity, track: track || null }
+    selectedRef.current = identity
+    setSelected(identity)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -69,26 +89,36 @@ export function Watch({ id }: { id: string }) {
         const room = new Room()
         roomRef.current = room
 
-        room.on(RoomEvent.TrackSubscribed, (track: any) => {
-          if (track.kind === Track.Kind.Video && videoRef.current) {
-            track.attach(videoRef.current)
-            if (noVideoTimer) clearTimeout(noVideoTimer)
-            setStatus('live')
-          }
+        const addFeed = (identity: string, track: any) => {
+          tracksRef.current[identity] = track
+          setFeeds((f) => (f.includes(identity) ? f : [...f, identity]))
+          if (noVideoTimer) clearTimeout(noVideoTimer)
+          setStatus('live')
+          // Premier flux reçu : on l'affiche. Si c'était déjà celui sélectionné (reconnexion), on réaffiche.
+          if (selectedRef.current === null || selectedRef.current === identity) showFeed(identity)
+        }
+
+        room.on(RoomEvent.TrackSubscribed, (track: any, _pub: any, participant: any) => {
+          if (track.kind === Track.Kind.Video) addFeed(participant.identity, track)
         })
-        room.on(RoomEvent.TrackUnsubscribed, (track: any) => {
-          if (track.kind === Track.Kind.Video) track.detach()
+        room.on(RoomEvent.TrackUnsubscribed, (track: any, _pub: any, participant: any) => {
+          if (track.kind !== Track.Kind.Video) return
+          delete tracksRef.current[participant.identity]
+          setFeeds((f) => f.filter((x) => x !== participant.identity))
+          if (selectedRef.current === participant.identity) {
+            const next = Object.keys(tracksRef.current)[0] || null
+            showFeed(next)
+            if (!next) setStatus('waiting')
+          }
         })
         room.on(RoomEvent.Disconnected, () => { if (!cancelled) setStatus('ended') })
 
         await room.connect(url, token)
         if (cancelled) { room.disconnect(); return }
 
-        // Si un flux vidéo est déjà en cours de publication, l'attacher directement.
+        // Flux déjà en cours de publication au moment où on rejoint la room.
         room.remoteParticipants.forEach((p: any) => {
-          p.videoTrackPublications.forEach((pub: any) => {
-            if (pub.track && videoRef.current) { pub.track.attach(videoRef.current); setStatus('live') }
-          })
+          p.videoTrackPublications.forEach((pub: any) => { if (pub.track) addFeed(p.identity, pub.track) })
         })
 
         setStatus((s) => (s === 'connecting' ? 'waiting' : s))
@@ -104,10 +134,13 @@ export function Watch({ id }: { id: string }) {
       if (noVideoTimer) clearTimeout(noVideoTimer)
       try { roomRef.current?.disconnect() } catch { /* */ }
       roomRef.current = null
+      tracksRef.current = {}
+      attachedRef.current = { identity: null, track: null }
     }
   }, [id])
 
   const title = data?.m ? `${data.names[data.m.player_a] || '…'} vs ${data.names[data.m.player_b] || '…'}` : 'Live'
+  const nameOf = (uid: string) => data?.names?.[uid] || 'Joueur'
 
   return (
     <section className="screen">
@@ -117,14 +150,25 @@ export function Watch({ id }: { id: string }) {
         {status !== 'live' && (
           <div className="small muted" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 16 }}>
             {status === 'connecting' && 'Connexion au live…'}
-            {status === 'waiting' && "En attente de l'image du joueur…"}
+            {status === 'waiting' && "En attente de l'image d'un joueur…"}
             {status === 'ended' && 'Ce live est terminé.'}
             {status === 'error' && (err || 'Impossible de rejoindre ce live.')}
           </div>
         )}
       </div>
+      {feeds.length > 1 && (
+        <div className="chips" style={{ marginTop: 10 }}>
+          {feeds.map((identity) => (
+            <button key={identity} className={'chip' + (selected === identity ? ' on' : '')} onClick={() => showFeed(identity)}>
+              📺 {nameOf(identity)}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="card small muted" style={{ marginTop: 10 }}>
-        Le flux peut avoir quelques secondes de décalage. Si rien ne s'affiche après une minute, le joueur a peut-être mis en pause ou arrêté son live.
+        {feeds.length > 1
+          ? "Les deux joueurs diffusent leur écran : choisis lequel regarder ci-dessus."
+          : "Le flux peut avoir quelques secondes de décalage. Si rien ne s'affiche après une minute, le joueur a peut-être mis en pause ou arrêté son live."}
       </div>
     </section>
   )
