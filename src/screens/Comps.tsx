@@ -95,7 +95,7 @@ function Bracket({ matches, names, meId, onOpen }: { matches: any[]; names: Reco
             <div className="rnd">
               {Object.keys(rounds).map((r) => (
                 <div key={r} className="stack" style={{ gap: 8 }}>
-                  <div className="small muted">{ph === 'elim' || ph === 'ko' ? (Number(r) === nR - 1 ? 'Finale' : Number(r) === nR - 2 && nR > 2 ? 'Demi-finales' : 'Tour ' + (Number(r) + 1)) : 'Journée ' + (Number(r) + 1)}</div>
+                  <div className="small muted">{ph === 'elim' || ph === 'ko' ? ROUND_NAMES(nR, Number(r)) : 'Journée ' + (Number(r) + 1)}</div>
                   {rounds[Number(r)].sort((a, b) => a.match_index - b.match_index).map((m) => {
                     const mine = m.player_a === meId || m.player_b === meId
                     const row = (p: string | null, sc: number | null) => (
@@ -288,7 +288,6 @@ export function CompDetail({ id }: { id: string }) {
                   <div className="small muted">Contre {oppOf(myNext)} · {fmt(myNext.scheduled_at)}</div>
                   {(() => { const o = myNext.player_a === me.id ? myNext.player_b : myNext.player_a; return o ? <HeadToHead meId={me.id} oppId={o} oppName={names[o] || 'ton adversaire'} /> : null })()}
                   <button className="btn" onClick={() => nav.go('match', { id: myNext.id })}>Entrer dans la salle du match</button>
-                  <button className="btn ghost" onClick={() => nav.go('match', { id: myNext.id })}>Envoyer mon résultat</button>
                 </div>
               )}
             </>

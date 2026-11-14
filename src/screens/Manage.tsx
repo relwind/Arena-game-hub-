@@ -110,6 +110,10 @@ export function CompManage({ id }: { id: string }) {
   const stage = c.status === 'finished' || c.status === 'cancelled' ? 3 : c.status === 'ongoing' ? 2 : ms.length ? 2 : c.status === 'closed' ? 1 : 0
   const stageName = ['Inscriptions', 'Tirage', 'En cours', c.status === 'cancelled' ? 'Annulée' : 'Terminée'][stage]
   const tabs = TABS.filter(([k]) => k !== 're' || isOrg)
+  // Après le tirage (ou une fois la compétition en cours/terminée/annulée), changer ces réglages
+  // n'aurait plus aucun effet sur le tableau déjà figé : on verrouille plutôt que de laisser
+  // l'organisateur croire que ça change quelque chose.
+  const settingsLocked = !!ms.length || !['open', 'closed'].includes(c.status)
 
   const delay = () => act(async () => {
     ck(await sb.from('competitions').update({ start_at: new Date(new Date(c.start_at).getTime() + 15 * 60e3).toISOString() }).eq('id', id))
@@ -263,20 +267,29 @@ export function CompManage({ id }: { id: string }) {
 
       {tab === 're' && rs && (
         <div className="stack">
-          <label className="f">Nom<input className="in" value={rs.name} onChange={(e) => setRs({ ...rs, name: e.target.value })} maxLength={80} /></label>
-          <div className="row" style={{ alignItems: 'flex-end' }}>
-            <label className="f grow">Date de début<input className="in" type="date" value={rs.date} onChange={(e) => setRs({ ...rs, date: e.target.value })} /></label>
-            <label className="f grow">Heure<select className="in" value={rs.time} onChange={(e) => setRs({ ...rs, time: e.target.value })}>{timeOptions().map((t) => <option key={t}>{t}</option>)}</select></label>
-          </div>
-          <div className="small muted">Si tu changes le jour ou l'heure, préviens les inscrits par une annonce.</div>
-          <label className="f">Date de fin (optionnel)<input className="in" type="date" value={rs.end} onChange={(e) => setRs({ ...rs, end: e.target.value })} />
-            <span className="small muted">Passé ce jour (23h59), Arena annule automatiquement la compétition si elle n'est pas terminée.</span></label>
-          <label className="f">Nombre de places<input className="in" type="number" inputMode="numeric" value={rs.max} onChange={(e) => setRs({ ...rs, max: e.target.value })} /></label>
-          <label className="f">Règlement<textarea className="in" value={rs.rules} onChange={(e) => setRs({ ...rs, rules: e.target.value })} placeholder="Format, horaires, conditions de participation…" /></label>
-          <label className="f">Réglages des matchs<select className="in" value={rs.preset} onChange={(e) => setRs({ ...rs, preset: e.target.value })}>{Object.entries(PRESETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
-          <label className="item"><span className="grow small">Diffusion obligatoire des demi-finales et de la finale</span><input type="checkbox" className="sw" checked={rs.live} onChange={(e) => setRs({ ...rs, live: e.target.checked })} /></label>
-          <CoverPicker value={rs.img} onChange={(u) => setRs((x: any) => ({ ...x, img: u }))} title={rs.name} sub={rs.date.split('-').reverse().join('/') + ' · ' + rs.time} />
-          <button className="btn" disabled={busy} onClick={save}>Enregistrer les modifications</button>
+          {settingsLocked && (
+            <div className="card small muted" style={{ borderColor: 'var(--gold)' }}>
+              {ms.length
+                ? "Le tirage a déjà eu lieu : changer ces réglages n'aurait plus d'effet sur le tableau. Lecture seule."
+                : "Cette compétition n'est plus en phase d'inscriptions. Lecture seule."}
+            </div>
+          )}
+          <fieldset disabled={settingsLocked} style={{ border: 0, padding: 0, margin: 0, display: 'contents' }}>
+            <label className="f">Nom<input className="in" value={rs.name} onChange={(e) => setRs({ ...rs, name: e.target.value })} maxLength={80} /></label>
+            <div className="row" style={{ alignItems: 'flex-end' }}>
+              <label className="f grow">Date de début<input className="in" type="date" value={rs.date} onChange={(e) => setRs({ ...rs, date: e.target.value })} /></label>
+              <label className="f grow">Heure<select className="in" value={rs.time} onChange={(e) => setRs({ ...rs, time: e.target.value })}>{timeOptions().map((t) => <option key={t}>{t}</option>)}</select></label>
+            </div>
+            <div className="small muted">Si tu changes le jour ou l'heure, préviens les inscrits par une annonce.</div>
+            <label className="f">Date de fin (optionnel)<input className="in" type="date" value={rs.end} onChange={(e) => setRs({ ...rs, end: e.target.value })} />
+              <span className="small muted">Passé ce jour (23h59), Arena annule automatiquement la compétition si elle n'est pas terminée.</span></label>
+            <label className="f">Nombre de places<input className="in" type="number" inputMode="numeric" value={rs.max} onChange={(e) => setRs({ ...rs, max: e.target.value })} /></label>
+            <label className="f">Règlement<textarea className="in" value={rs.rules} onChange={(e) => setRs({ ...rs, rules: e.target.value })} placeholder="Format, horaires, conditions de participation…" /></label>
+            <label className="f">Réglages des matchs<select className="in" value={rs.preset} onChange={(e) => setRs({ ...rs, preset: e.target.value })}>{Object.entries(PRESETS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+            <label className="item"><span className="grow small">Diffusion obligatoire des demi-finales et de la finale</span><input type="checkbox" className="sw" checked={rs.live} onChange={(e) => setRs({ ...rs, live: e.target.checked })} /></label>
+            <CoverPicker value={rs.img} onChange={(u) => setRs((x: any) => ({ ...x, img: u }))} title={rs.name} sub={rs.date.split('-').reverse().join('/') + ' · ' + rs.time} />
+          </fieldset>
+          <button className="btn" disabled={busy || settingsLocked} onClick={save}>Enregistrer les modifications</button>
         </div>
       )}
     </section>
