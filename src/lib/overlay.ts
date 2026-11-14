@@ -4,6 +4,8 @@ interface ArenaOverlayPlugin {
   hasOverlayPermission(): Promise<{ granted: boolean }>
   requestOverlayPermission(): Promise<{ granted: boolean }>
   requestProjectionPermission(): Promise<{ granted: boolean }>
+  hasMicPermission(): Promise<{ granted: boolean }>
+  requestMicPermission(): Promise<{ granted: boolean }>
   showBubble(opts: {
     sessionId: string
     matchId: string
@@ -14,6 +16,7 @@ interface ArenaOverlayPlugin {
     accessToken: string
     userId: string
     displayName: string
+    audioAllowed: boolean
   }): Promise<void>
   hideBubble(): Promise<void>
   isBubbleShown(): Promise<{ shown: boolean; live: boolean }>
@@ -49,7 +52,14 @@ export async function startArenaBubble(args: {
   if (!perm.granted) throw new Error('overlay_denied')
   const proj = await ArenaOverlay.requestProjectionPermission()
   if (!proj.granted) throw new Error('projection_denied')
-  await ArenaOverlay.showBubble({ sessionId: '', matchId: '', roomId: '', ...args })
+  // Son du jeu en live : facultatif, on ne bloque jamais la bulle si le joueur refuse
+  // ou si le micro n'est pas disponible — le live continue simplement sans le son.
+  let audioAllowed = false
+  try {
+    const mic = await ArenaOverlay.requestMicPermission()
+    audioAllowed = !!mic.granted
+  } catch { /* pas grave : live vidéo seule */ }
+  await ArenaOverlay.showBubble({ sessionId: '', matchId: '', roomId: '', audioAllowed, ...args })
 }
 
 export async function stopArenaBubble() {

@@ -149,13 +149,16 @@ if (!man2.includes('SYSTEM_ALERT_WINDOW')) {
     '<application',
     `<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n` +
     `    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n` +
-    `    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />\n\n    <application`
+    `    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />\n` +
+    `    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />\n` +
+    // Son du jeu diffusé en live (capture audio système), seulement si le joueur l'autorise.
+    `    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n\n    <application`
   )
 }
 if (!man2.includes('app.arena.overlay.OverlayService')) {
   man2 = man2.replace(
     '</application>',
-    `    <service android:name="app.arena.overlay.OverlayService" android:foregroundServiceType="mediaProjection" android:exported="false" />\n</application>`
+    `    <service android:name="app.arena.overlay.OverlayService" android:foregroundServiceType="mediaProjection|microphone" android:exported="false" />\n</application>`
   )
 }
 fs.writeFileSync(manPath, man2)

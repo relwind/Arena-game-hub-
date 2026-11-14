@@ -1,5 +1,6 @@
 package app.arena.overlay
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
@@ -8,11 +9,14 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.result.ActivityResult
 import com.getcapacitor.JSObject
+import com.getcapacitor.PermissionState
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.getcapacitor.annotation.Permission
+import com.getcapacitor.annotation.PermissionCallback
 
 /**
  * Pont JS <-> natif pour la bulle flottante Arena.
@@ -21,7 +25,12 @@ import com.getcapacitor.annotation.CapacitorPlugin
  * qui continue de tourner même quand l'appli Arena passe en arrière-plan
  * (le joueur est dans eFootball).
  */
-@CapacitorPlugin(name = "ArenaOverlay")
+@CapacitorPlugin(
+    name = "ArenaOverlay",
+    // Micro = capture du son du jeu pendant le live (ScreenAudioCapturer a besoin de
+    // RECORD_AUDIO, même pour l'audio système, pas seulement pour la voix du joueur).
+    permissions = [Permission(strings = [Manifest.permission.RECORD_AUDIO], alias = "microphone")]
+)
 class ArenaOverlayPlugin : Plugin() {
 
     override fun load() {
@@ -68,6 +77,25 @@ class ArenaOverlayPlugin : Plugin() {
         val ret = JSObject(); ret.put("granted", granted); call.resolve(ret)
     }
 
+    /** Son du jeu en direct : entièrement facultatif, ne bloque jamais la bulle si refusé. */
+    @PluginMethod
+    fun hasMicPermission(call: PluginCall) {
+        val ret = JSObject(); ret.put("granted", getPermissionState("microphone") == PermissionState.GRANTED); call.resolve(ret)
+    }
+
+    @PluginMethod
+    fun requestMicPermission(call: PluginCall) {
+        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+            val ret = JSObject(); ret.put("granted", true); call.resolve(ret); return
+        }
+        requestPermissionForAlias("microphone", call, "micPermissionResult")
+    }
+
+    @PermissionCallback
+    private fun micPermissionResult(call: PluginCall) {
+        val ret = JSObject(); ret.put("granted", getPermissionState("microphone") == PermissionState.GRANTED); call.resolve(ret)
+    }
+
     @PluginMethod
     fun showBubble(call: PluginCall) {
         if (!Settings.canDrawOverlays(context)) {
@@ -89,6 +117,7 @@ class ArenaOverlayPlugin : Plugin() {
             putExtra("accessToken", call.getString("accessToken", ""))
             putExtra("userId", call.getString("userId", ""))
             putExtra("displayName", call.getString("displayName", "Joueur"))
+            putExtra("audioAllowed", call.getBoolean("audioAllowed", false) ?: false)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent) else context.startService(intent)
         call.resolve()

@@ -36,7 +36,10 @@ import android.widget.Toast
 import app.arena.gamehub.R
 import com.getcapacitor.JSObject
 import io.livekit.android.LiveKit
+import io.livekit.android.audio.ScreenAudioCapturer
 import io.livekit.android.room.Room
+import io.livekit.android.room.track.LocalAudioTrack
+import io.livekit.android.room.track.Track
 import io.livekit.android.room.track.screencapture.ScreenCaptureParams
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -97,6 +100,7 @@ class OverlayService : Service() {
     private var accessToken: String = ""
     private var userId: String = ""
     private var displayName: String = "Joueur"
+    private var audioAllowed: Boolean = false // micro autorisé par le joueur : on tente aussi le son du jeu en live
 
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
@@ -106,6 +110,8 @@ class OverlayService : Service() {
     // ci-dessus, qui sert uniquement au bouton « Capture d'écran »).
     private var liveKitRoom: Room? = null
     private val liveKitScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var screenAudioCapturer: ScreenAudioCapturer? = null
+    private var micAudioTrack: LocalAudioTrack? = null
 
     private var chatPoll: Runnable? = null
     private val nameCache = HashMap<String, String>()
@@ -132,6 +138,7 @@ class OverlayService : Service() {
                 accessToken = intent?.getStringExtra("accessToken") ?: accessToken
                 userId = intent?.getStringExtra("userId") ?: userId
                 displayName = intent?.getStringExtra("displayName") ?: displayName
+                audioAllowed = intent?.getBooleanExtra("audioAllowed", audioAllowed) ?: audioAllowed
                 startForegroundNotif()
                 if (!isRunning) {
                     wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -164,7 +171,12 @@ class OverlayService : Service() {
             .setOngoing(true)
             .build()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+            // Déclaré dès le départ même si le son du live n'est pas encore activé à cet instant :
+            // un foreground service ne peut pas ajouter un type après coup.
+            startForeground(
+                NOTIF_ID, notif,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            )
         } else {
             startForeground(NOTIF_ID, notif)
         }
@@ -595,6 +607,7 @@ class OverlayService : Service() {
                     liveKitRoom = r
                     r.connect(url, tok)
                     r.localParticipant.setScreenShareEnabled(true, ScreenCaptureParams(projectionData))
+                    if (audioAllowed) startLiveAudio(r)
                     toast("Diffusion vidéo en direct active.")
                 } catch (e: Exception) {
                     toast("Connexion vidéo impossible : ${e.message}")
@@ -603,11 +616,43 @@ class OverlayService : Service() {
         }
     }
 
+    /**
+     * Branche le son du jeu (audio système capturé via la même projection d'écran)
+     * sur une piste audio LiveKit. Entièrement facultatif : toute erreur ici laisse
+     * simplement le live continuer en vidéo seule, sans faire planter le reste.
+     * Nécessite RECORD_AUDIO (déjà vérifié côté JS avant d'arriver ici) et l'API 29+.
+     */
+    private suspend fun startLiveAudio(r: Room) {
+        try {
+            val mp = mediaProjection ?: return
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+            val micOk = r.localParticipant.setMicrophoneEnabled(true)
+            val track = r.localParticipant.getTrackPublication(Track.Source.MICROPHONE)?.track as? LocalAudioTrack
+            if (micOk && track != null) {
+                val capturer = ScreenAudioCapturer(mp)
+                track.setAudioBufferCallback(capturer)
+                screenAudioCapturer = capturer
+                micAudioTrack = track
+            }
+        } catch (e: Exception) {
+            handler.post { toast("Le son du live n'a pas pu être activé, la vidéo continue sans lui.") }
+        }
+    }
+
+    private fun stopLiveAudio() {
+        try { micAudioTrack?.setAudioBufferCallback(null) } catch (_: Exception) {}
+        try { screenAudioCapturer?.releaseAudioResources() } catch (_: Exception) {}
+        micAudioTrack = null
+        screenAudioCapturer = null
+    }
+
     private fun disconnectLiveKit() {
         val r = liveKitRoom
         liveKitRoom = null
+        stopLiveAudio()
         if (r != null) {
             liveKitScope.launch {
+                try { r.localParticipant.setMicrophoneEnabled(false) } catch (_: Exception) {}
                 try { r.localParticipant.setScreenShareEnabled(false, null) } catch (_: Exception) {}
                 try { r.disconnect() } catch (_: Exception) {}
             }
