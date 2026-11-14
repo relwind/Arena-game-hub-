@@ -5,11 +5,15 @@ import { useApp, useLoad, q, Top, Spin, errMsg, namesOf, fmt } from '../lib/ui'
 export function Live() {
   const { nav } = useApp()
   const { data, loading } = useLoad(async () => {
-    const ls = await q<any[]>(sb.from('live_sessions').select('id,match_id,competition_id,status,delay_seconds,started_at').eq('status', 'live').order('started_at', { ascending: false }).limit(30))
+    // La RLS ne renvoie déjà que les lives que ce joueur a le droit de voir
+    // (match de compétition, salle dont il est membre, ou salle ouverte à "tous"/"amis").
+    const ls = await q<any[]>(sb.from('live_sessions').select('id,match_id,room_id,competition_id,status,delay_seconds,started_at').eq('status', 'live').order('started_at', { ascending: false }).limit(30))
     const ms = ls.length ? await q<any[]>(sb.from('matches').select('id,player_a,player_b').in('id', ls.map((l) => l.match_id).filter(Boolean))) : []
     const cs = ls.length ? await q<any[]>(sb.from('competitions').select('id,name').in('id', ls.map((l) => l.competition_id).filter(Boolean))) : []
-    const names = await namesOf(ms.flatMap((m) => [m.player_a, m.player_b]))
-    return { ls, ms, cs, names }
+    const roomIds = ls.map((l) => l.room_id).filter(Boolean)
+    const rps = roomIds.length ? await q<any[]>(sb.from('room_players').select('room_id,user_id').in('room_id', roomIds)) : []
+    const names = await namesOf([...ms.flatMap((m) => [m.player_a, m.player_b]), ...rps.map((r) => r.user_id)])
+    return { ls, ms, cs, rps, names }
   }, [], 10000)
   return (
     <section className="screen">
@@ -20,9 +24,15 @@ export function Live() {
           {data?.ls.map((l: any) => {
             const m = data.ms.find((x: any) => x.id === l.match_id)
             const c = data.cs.find((x: any) => x.id === l.competition_id)
+            const roomPlayers = l.room_id ? data.rps.filter((r: any) => r.room_id === l.room_id) : []
+            const title = m
+              ? `${data.names[m.player_a]} vs ${data.names[m.player_b]}`
+              : roomPlayers.length
+              ? roomPlayers.map((r: any) => data.names[r.user_id] || '…').join(' vs ')
+              : 'Match'
             return (
               <button key={l.id} className="item" onClick={() => nav.go('watch', { id: l.id })}>
-                <div className="grow"><b>{m ? `${data.names[m.player_a]} vs ${data.names[m.player_b]}` : 'Match'}</b><div className="small muted">{c?.name} · depuis {fmt(l.started_at)}</div></div>
+                <div className="grow"><b>{title}</b><div className="small muted">{c?.name || (l.room_id ? 'Partie amicale' : '')} · depuis {fmt(l.started_at)}</div></div>
                 <span className="badge b-live">LIVE</span>
               </button>
             )
@@ -53,10 +63,11 @@ export function Watch({ id }: { id: string }) {
   const selectedRef = useRef<string | null>(null)
 
   const { data } = useLoad(async () => {
-    const s = await q<any>(sb.from('live_sessions').select('id,match_id,competition_id,status,started_at').eq('id', id).single())
+    const s = await q<any>(sb.from('live_sessions').select('id,match_id,room_id,competition_id,status,started_at').eq('id', id).single())
     const m = s.match_id ? await q<any>(sb.from('matches').select('id,player_a,player_b').eq('id', s.match_id).single()) : null
-    const names = m ? await namesOf([m.player_a, m.player_b]) : {}
-    return { s, m, names }
+    const rps = !m && s.room_id ? await q<any[]>(sb.from('room_players').select('user_id').eq('room_id', s.room_id)) : []
+    const names = await namesOf(m ? [m.player_a, m.player_b] : rps.map((r: any) => r.user_id))
+    return { s, m, rps, names }
   }, [id], 8000)
 
   // Affiche le flux demandé dans la balise <video> : détache l'ancien, attache le nouveau.
@@ -139,7 +150,11 @@ export function Watch({ id }: { id: string }) {
     }
   }, [id])
 
-  const title = data?.m ? `${data.names[data.m.player_a] || '…'} vs ${data.names[data.m.player_b] || '…'}` : 'Live'
+  const title = data?.m
+    ? `${data.names[data.m.player_a] || '…'} vs ${data.names[data.m.player_b] || '…'}`
+    : data?.rps?.length
+    ? data.rps.map((r: any) => data.names[r.user_id] || '…').join(' vs ')
+    : 'Live'
   const nameOf = (uid: string) => data?.names?.[uid] || 'Joueur'
 
   return (
