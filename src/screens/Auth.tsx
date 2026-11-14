@@ -74,7 +74,7 @@ function Steps({ n, label }: { n: number; label: string }) {
 
 export function Signup() {
   const { nav } = useApp()
-  const [f, setF] = useState({ name: '', email: '', ci: 0, tel: '', dob: '', ref: '', pw: '', pw2: '', cgu: false })
+  const [f, setF] = useState({ name: '', email: '', ci: 0, tel: '', dob: '', pw: '', pw2: '', cgu: false })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k: string) => (e: any) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value })
@@ -109,7 +109,7 @@ export function Signup() {
     const { data, error } = await sb.auth.signUp({
       email: f.email.trim(),
       password: f.pw,
-      options: { data: { username: name, birth_date: f.dob, country: c.n, phone, referral: f.ref.trim() } },
+      options: { data: { username: name, birth_date: f.dob, country: c.n, phone } },
     })
     setBusy(false)
     if (error) return setErr(errMsg(error))
@@ -135,7 +135,6 @@ export function Signup() {
           </div>
         </label>
         <label className="f">Date de naissance (16 ans minimum)<input className="in" type="date" value={f.dob} onChange={set('dob')} /></label>
-        <label className="f">Code de parrainage (optionnel)<input className="in" autoCapitalize="characters" value={f.ref} onChange={set('ref')} maxLength={20} /></label>
         <label className="f">Mot de passe<input className="in" type="password" autoComplete="new-password" value={f.pw} onChange={set('pw')} /></label>
         <label className="f">Confirmer le mot de passe<input className="in" type="password" autoComplete="new-password" value={f.pw2} onChange={set('pw2')} /></label>
         <label className="row small muted" style={{ gap: 8 }}>
