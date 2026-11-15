@@ -189,8 +189,8 @@ export function MatchRoom({ id }: { id: string }) {
               {m.host_id && (
                 <>
                   <div className="small">Hôte : <b>{m.host_id === me.id ? 'toi' : names[m.host_id]}</b></div>
-                  {!room?.room_code && m.host_chosen_at && (() => {
-                    const deadline = new Date(m.host_chosen_at).getTime() + 5 * 60000
+                  {!room?.room_code && m.scheduled_at && (() => {
+                    const deadline = new Date(m.scheduled_at).getTime() + 5 * 60000
                     const leftMs = deadline - Date.now()
                     const late = leftMs <= 0
                     const mm = Math.max(0, Math.floor(leftMs / 60000))
