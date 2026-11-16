@@ -10,15 +10,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.Bitmap
 import android.graphics.PixelFormat
-import android.hardware.display.DisplayManager
-import android.hardware.display.VirtualDisplay
-import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
-import android.os.Environment
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -46,23 +41,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
-import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 
 /**
  * Service qui fait vivre la bulle flottante Arena par-dessus les autres applications
- * (notamment eFootball) : démarrage/arrêt du live, capture d'écran, et une petite
- * fenêtre de discussion. Tourne en foreground service pour ne pas être tué par le
- * système pendant que le joueur joue.
+ * (notamment eFootball) : démarrage/arrêt du live (diffusion vidéo réelle vers LiveKit
+ * Cloud, avec son du jeu en option), et une petite fenêtre de discussion. Tourne en
+ * foreground service pour ne pas être tué par le système pendant que le joueur joue.
  *
- * NB : la diffusion vidéo réelle vers LiveKit n'est pas encore branchée ici (il faut
- * d'abord les identifiants LiveKit Cloud). Pour l'instant, "Démarrer le live" ouvre
- * déjà la capture d'écran (MediaProjection) et prévient le serveur Arena (start_live),
- * ce qui permet de tester toute la mécanique de la bulle. Le branchement vers LiveKit
- * (publication de la piste vidéo) viendra se greffer sur le VirtualDisplay déjà créé ici.
+ * NB : un seul jeton de MediaProjection ne peut démarrer qu'une seule capture d'écran
+ * (depuis Android 14). C'est LiveKit (dans connectLiveKit) qui la démarre pour publier
+ * la vidéo ; rien d'autre ici ne doit créer de second VirtualDisplay sur ce jeton.
  */
 class OverlayService : Service() {
 
@@ -103,11 +92,8 @@ class OverlayService : Service() {
     private var audioAllowed: Boolean = false // micro autorisé par le joueur : on tente aussi le son du jeu en live
 
     private var mediaProjection: MediaProjection? = null
-    private var virtualDisplay: VirtualDisplay? = null
-    private var imageReader: ImageReader? = null
 
-    // Diffusion vidéo réelle vers LiveKit Cloud (en plus de la capture locale
-    // ci-dessus, qui sert uniquement au bouton « Capture d'écran »).
+    // Diffusion vidéo réelle vers LiveKit Cloud.
     private var liveKitRoom: Room? = null
     private val liveKitScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var screenAudioCapturer: ScreenAudioCapturer? = null
@@ -240,10 +226,10 @@ class OverlayService : Service() {
             removeView(menuView); menuView = null
             if (isLive) stopLive() else startLive()
         }
-        view.findViewById<View>(R.id.arenaBtnShot).setOnClickListener {
-            removeView(menuView); menuView = null
-            takeScreenshot()
-        }
+        // Retiré : capturait l'écran via une deuxième VirtualDisplay sur le même jeton de
+        // MediaProjection que le live, ce qu'Android 14+ interdit ("Cannot start already
+        // started MediaProjection") — faisait planter la diffusion vidéo à chaque fois.
+        view.findViewById<View>(R.id.arenaBtnShot).visibility = View.GONE
         view.findViewById<View>(R.id.arenaBtnChat).setOnClickListener {
             removeView(menuView); menuView = null
             toggleChat()
@@ -547,13 +533,10 @@ class OverlayService : Service() {
             projection.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() { if (isLive) stopLive() }
             }, handler)
-            val dm = DisplayMetrics(); wm.defaultDisplay.getMetrics(dm)
-            val reader = ImageReader.newInstance(dm.widthPixels, dm.heightPixels, PixelFormat.RGBA_8888, 2)
-            imageReader = reader
-            virtualDisplay = projection.createVirtualDisplay(
-                "ArenaLive", dm.widthPixels, dm.heightPixels, dm.densityDpi,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.surface, null, handler
-            )
+            // Pas de VirtualDisplay/ImageReader créés ici : depuis Android 14, un jeton de
+            // MediaProjection ne peut démarrer qu'une seule capture d'écran. connectLiveKit()
+            // ci-dessous en démarre une (pour la diffusion vidéo) ; en créer une seconde ici
+            // provoquait "Cannot start already started MediaProjection" à chaque live.
             isLive = true
             bubbleView?.findViewById<TextView>(R.id.arenaBubbleFace)?.setBackgroundResource(R.drawable.arena_bubble_bg_live)
             toast("Live démarré")
@@ -647,10 +630,8 @@ class OverlayService : Service() {
 
     private fun stopLive() {
         isLive = false
-        try { virtualDisplay?.release() } catch (_: Exception) {}
         try { mediaProjection?.stop() } catch (_: Exception) {}
-        try { imageReader?.close() } catch (_: Exception) {}
-        virtualDisplay = null; mediaProjection = null; imageReader = null
+        mediaProjection = null
         disconnectLiveKit()
         bubbleView?.findViewById<TextView>(R.id.arenaBubbleFace)?.setBackgroundResource(R.drawable.arena_bubble_bg)
         toast("Live arrêté")
@@ -658,40 +639,6 @@ class OverlayService : Service() {
         val stopArg = if (mode == "room") "_room" to roomId else "_match" to matchId
         BubbleHttp.rpc(supabaseUrl, supabaseKey, accessToken, stopFn, JSONObject().put(stopArg.first, stopArg.second))
         pluginRef?.emit("liveStateChanged", JSObject().put("live", false))
-    }
-
-    // ---------------------------------------------------------------- capture d'écran
-
-    private fun takeScreenshot() {
-        val reader = imageReader
-        if (reader == null) {
-            toast("Démarrez le live pour pouvoir capturer l'écran.")
-            return
-        }
-        try {
-            val image = reader.acquireLatestImage()
-            if (image == null) { toast("Capture indisponible pour l'instant, réessayez."); return }
-            val plane = image.planes[0]
-            val buffer = plane.buffer
-            val pixelStride = plane.pixelStride
-            val rowStride = plane.rowStride
-            val rowPadding = rowStride - pixelStride * image.width
-            val bitmap = Bitmap.createBitmap(image.width + rowPadding / pixelStride, image.height, Bitmap.Config.ARGB_8888)
-            bitmap.copyPixelsFromBuffer(buffer)
-            image.close()
-
-            val dir = File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Arena")
-            if (!dir.exists()) dir.mkdirs()
-            val name = "arena_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.FRANCE).format(Date()) + ".png"
-            val file = File(dir, name)
-            FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 95, it) }
-            bitmap.recycle()
-
-            toast("Capture enregistrée dans Images/Arena")
-            pluginRef?.emit("screenshotTaken", JSObject().put("path", file.absolutePath))
-        } catch (e: Exception) {
-            toast("Capture impossible : ${e.message}")
-        }
     }
 
     // ---------------------------------------------------------------- chat

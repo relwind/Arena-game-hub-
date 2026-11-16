@@ -21,7 +21,6 @@ interface ArenaOverlayPlugin {
   hideBubble(): Promise<void>
   isBubbleShown(): Promise<{ shown: boolean; live: boolean }>
   addListener(eventName: 'liveStateChanged', cb: (data: { live: boolean }) => void): any
-  addListener(eventName: 'screenshotTaken', cb: (data: { path: string }) => void): any
   addListener(eventName: 'endRequested', cb: (data: { matchId: string; roomId: string; mode: 'match' | 'room' }) => void): any
 }
 
