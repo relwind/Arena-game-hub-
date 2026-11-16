@@ -45,5 +45,5 @@ export function onPushNotificationTapped(cb: (link: string) => void) {
     const link = action?.notification?.data?.link as string | undefined
     if (link) cb(link)
   })
-  return { remove: () => { handle.remove() } }
+  return { remove: () => { handle.then((h) => h.remove()) } }
 }
