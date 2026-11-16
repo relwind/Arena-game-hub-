@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { sb } from '../lib/supabase'
-import { useApp, useLoad, q, fmt, hhmm, inTxt, leftTxt, STATUS, FORMATS, Spin, namesOf, GameArt, Av } from '../lib/ui'
+import { useApp, useLoad, q, rpc, fmt, hhmm, inTxt, leftTxt, STATUS, FORMATS, Spin, namesOf, GameArt, Av } from '../lib/ui'
 
 const ICON = {
   plus: 'M12 5v14M5 12h14',
@@ -24,8 +24,9 @@ export function Home() {
   const { me, nav } = useApp()
   const [hideStart, setHideStart] = useState(() => { try { return localStorage.getItem('arena_start_hidden') === '1' } catch { return false } })
   const { data, loading } = useLoad(async () => {
-    const [unread, mine, comps, mymatches, anyReg] = await Promise.all([
+    const [unread, unreadMsgs, mine, comps, mymatches, anyReg] = await Promise.all([
       sb.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', me.id).is('read_at', null),
+      rpc('count_unread_messages').catch(() => 0),
       q<any[]>(sb.from('registrations').select('competition_id,status').eq('user_id', me.id).in('status', ['registered', 'waitlist'])),
       q<any[]>(sb.from('competitions').select('id,name,start_at,max_players,format,status,image_url,registrations(count)').in('status', ['open', 'closed', 'ongoing']).order('start_at').limit(40)),
       q<any[]>(sb.from('matches').select('id,competition_id,player_a,player_b,scheduled_at,round_index,phase').is('winner_id', null).eq('bye', false).not('player_a', 'is', null).not('player_b', 'is', null)
@@ -40,7 +41,7 @@ export function Home() {
     const names = await namesOf(mymatches.flatMap((m) => [m.player_a, m.player_b]))
     const compName: Record<string, string> = {}
     list.forEach((c) => (compName[c.id] = c.name))
-    return { unread: unread.count || 0, hero, heroMine: hero && myIds.includes(hero.id), open, pop, up: mymatches, names, compName, hasReg: (anyReg.count || 0) > 0 }
+    return { unread: unread.count || 0, unreadMsgs: unreadMsgs || 0, hero, heroMine: hero && myIds.includes(hero.id), open, pop, up: mymatches, names, compName, hasReg: (anyReg.count || 0) > 0 }
   }, [me.id], 20000)
 
   const steps = [
@@ -60,7 +61,10 @@ export function Home() {
           <h2 style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Bonjour, {me.profile?.username}</h2>
           <div className="small muted">Prêt à jouer ?</div>
         </div>
-        <button className="ib" onClick={() => nav.go('messages')} aria-label="Messages"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg></button>
+        <button className="ib" onClick={() => nav.go('messages')} aria-label="Messages">
+          <svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" /></svg>
+          {!!data?.unreadMsgs && <span className="cnt">{data.unreadMsgs}</span>}
+        </button>
         <button className="ib" onClick={() => nav.go('notifs')} aria-label="Notifications">
           <svg viewBox="0 0 24 24"><path d="M6 17V11a6 6 0 0112 0v6l2 2H4zM10 21h4" /></svg>
           {!!data?.unread && <span className="cnt">{data.unread}</span>}
