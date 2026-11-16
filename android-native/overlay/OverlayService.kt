@@ -415,9 +415,12 @@ class OverlayService : Service() {
             }
         }
 
+        // Pas de FLAG_NOT_FOCUSABLE ici (contrairement à la bulle et au menu) : cet écran contient
+        // un champ de saisie (le code de la salle), et une fenêtre non focusable empêche le clavier
+        // de s'ouvrir dessus. Même choix que la fenêtre « Contacter l'organisateur » juste au-dessus.
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
-            overlayType(), WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT
+            overlayType(), 0, PixelFormat.TRANSLUCENT
         )
         params.gravity = Gravity.TOP or Gravity.START
         val bp = bubbleParams
