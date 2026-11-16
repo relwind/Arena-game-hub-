@@ -18,6 +18,7 @@ export function MatchRoom({ id }: { id: string }) {
   const chatEnd = useRef<HTMLDivElement>(null)
   const [bubbleShown, setBubbleShown] = useState(false)
   const [bubbleLive, setBubbleLive] = useState(false)
+  const [confirming, setConfirming] = useState(true) // propose d'abord de confirmer le score de l'adversaire, s'il y en a un
 
   useEffect(() => {
     arenaBubbleStatus().then((s) => { setBubbleShown(s.shown); setBubbleLive(s.live) })
@@ -94,7 +95,6 @@ export function MatchRoom({ id }: { id: string }) {
     setMsg('')
     await act(async () => { await q(sb.from('match_messages').insert({ match_id: id, user_id: me.id, body: t })) })
   }
-  const [confirming, setConfirming] = useState(true) // propose d'abord de confirmer le score de l'adversaire, s'il y en a un
   const submitScore = (forceA?: number, forceB?: number) => {
     const a = forceA ?? Number(sa), b = forceB ?? Number(sb_)
     if (forceA === undefined && (sa === '' || sb_ === '' || !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0)) return setErr('Entre les deux scores.')
