@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { App as CapApp } from '@capacitor/app'
-import { startPush } from './lib/push'
+import { startPush, onPushNotificationTapped } from './lib/push'
 import { onArenaEndRequested } from './lib/overlay'
 import { sb } from './lib/supabase'
 import { Ctx, Route, Spin, q } from './lib/ui'
@@ -98,6 +98,22 @@ export default function App() {
     const sub = onArenaEndRequested(({ matchId, roomId, mode }) => {
       if (mode === 'room' && roomId) navRef.current?.go('rplay', { id: roomId })
       else if (matchId) navRef.current?.go('match', { id: matchId })
+    })
+    return () => sub.remove()
+  }, [])
+
+  // Taper sur une notification (match, salle amicale, compétition ou message) amène
+  // directement au bon écran plutôt qu'à l'accueil.
+  useEffect(() => {
+    const sub = onPushNotificationTapped((link) => {
+      const i = link.indexOf(':')
+      if (i < 0) return
+      const kind = link.slice(0, i), id = link.slice(i + 1)
+      if (!id) return
+      if (kind === 'match') navRef.current?.go('match', { id })
+      else if (kind === 'room') navRef.current?.go('rplay', { id })
+      else if (kind === 'comp') navRef.current?.go('cdetail', { id })
+      else if (kind === 'conv') navRef.current?.go('conv', { id, name: '' })
     })
     return () => sub.remove()
   }, [])

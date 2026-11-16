@@ -35,3 +35,15 @@ export async function startPush(userId: string) {
     await PushNotifications.register()
   } catch { /* plateforme sans notifications push : on continue normalement */ }
 }
+
+// Écoute le tap sur une notification (y compris celle qui vient de lancer l'appli) et renvoie
+// le "lien" attaché côté serveur (ex. "match:<id>", "room:<id>", "comp:<id>", "conv:<id>"),
+// pour amener directement au bon endroit plutôt qu'à l'accueil.
+export function onPushNotificationTapped(cb: (link: string) => void) {
+  if (!Capacitor.isNativePlatform()) return { remove: () => {} }
+  const handle = PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+    const link = action?.notification?.data?.link as string | undefined
+    if (link) cb(link)
+  })
+  return { remove: () => { handle.remove() } }
+}
