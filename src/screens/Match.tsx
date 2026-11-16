@@ -94,9 +94,10 @@ export function MatchRoom({ id }: { id: string }) {
     setMsg('')
     await act(async () => { await q(sb.from('match_messages').insert({ match_id: id, user_id: me.id, body: t })) })
   }
-  const submitScore = () => {
-    const a = Number(sa), b = Number(sb_)
-    if (sa === '' || sb_ === '' || !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) return setErr('Entre les deux scores.')
+  const [confirming, setConfirming] = useState(true) // propose d'abord de confirmer le score de l'adversaire, s'il y en a un
+  const submitScore = (forceA?: number, forceB?: number) => {
+    const a = forceA ?? Number(sa), b = forceB ?? Number(sb_)
+    if (forceA === undefined && (sa === '' || sb_ === '' || !Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0)) return setErr('Entre les deux scores.')
     if (a === b) return setErr("Égalité impossible : indique le score final (prolongation ou tirs au but).")
     if (!cap) return setErr("La capture d'écran du score final est obligatoire en compétition.")
     act(async () => {
@@ -228,18 +229,31 @@ export function MatchRoom({ id }: { id: string }) {
           {myResult ? (
             <div className="small">Ton score envoyé : {A} {myResult.score_a} – {myResult.score_b} {B}. {myResult.proof_url && <ProofLink path={myResult.proof_url} label="Ma capture" />}{' '}
               {oppResult ? "Les scores ne correspondent pas : l'organisateur va trancher." : "En attente de l'adversaire (validation automatique après 15 minutes)."}</div>
+          ) : oppResult && confirming ? (
+            <>
+              <div className="small">Ton adversaire a envoyé : {A} <b>{oppResult.score_a} – {oppResult.score_b}</b> {B}. {oppResult.proof_url && <ProofLink path={oppResult.proof_url} label="Sa capture" />}</div>
+              <label className="btn ghost" style={{ textAlign: 'center', cursor: 'pointer', borderColor: cap ? undefined : 'var(--live)' }}>
+                {cap ? '✓ Capture ajoutée : ' + cap.name.slice(0, 22) : "Ajoute ta capture d'écran du score final pour confirmer (obligatoire)"}
+                <input type="file" accept="image/*" hidden onChange={(e) => setCap(e.target.files?.[0] || null)} />
+              </label>
+              <div className="row">
+                <button className="btn ghost" disabled={busy} onClick={() => setConfirming(false)}>Ce n'est pas le bon score</button>
+                <button className="btn" disabled={busy || !cap} onClick={() => submitScore(oppResult.score_a, oppResult.score_b)}>✓ C'est correct, confirmer</button>
+              </div>
+            </>
           ) : (
             <>
+              {oppResult && <button className="btn ghost small" style={{ marginBottom: 6 }} onClick={() => setConfirming(true)}>← Revenir à la confirmation du score de l'adversaire</button>}
               <div className="row">
                 <label className="f grow">{A}<input className="in" type="number" inputMode="numeric" min={0} value={sa} onChange={(e) => setSa(e.target.value)} /></label>
                 <label className="f grow">{B}<input className="in" type="number" inputMode="numeric" min={0} value={sb_} onChange={(e) => setSb(e.target.value)} /></label>
               </div>
               <label className="btn ghost" style={{ textAlign: 'center', cursor: 'pointer', borderColor: cap ? undefined : 'var(--live)' }}>
-                {cap ? '✓ Capture ajoutée : ' + cap.name.slice(0, 22) : "Ajouter la capture d'écran du score final (obligatoire)"}
+                {cap ? '✓ Capture ajoutée : ' + cap.name.slice(0, 22) : "Ajoute la capture d'écran du score final (obligatoire)"}
                 <input type="file" accept="image/*" hidden onChange={(e) => setCap(e.target.files?.[0] || null)} />
               </label>
               <div className="small muted">La capture doit montrer l'écran de fin de partie complet, avec les deux pseudos visibles. Les deux scores identiques valident le match automatiquement.</div>
-              <button className="btn" disabled={busy || !cap} onClick={submitScore}>Envoyer le score</button>
+              <button className="btn" disabled={busy || !cap} onClick={() => submitScore()}>Envoyer le score</button>
             </>
           )}
         </div>
