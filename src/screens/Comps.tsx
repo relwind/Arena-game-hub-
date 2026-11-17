@@ -16,7 +16,7 @@ export function Comps() {
   const [search, setSearch] = useState('')
   const { data, loading, err } = useLoad(async () => {
     const [rows, mine] = await Promise.all([
-      q<any[]>(sb.from('competitions').select('id,name,status,start_at,max_players,format,organizer_id,prize,image_url,registrations(count)').in('status', GROUPS[tab]).order('start_at', { ascending: tab === 'avenir' }).limit(80)),
+      q<any[]>(sb.from('competitions').select('id,name,status,start_at,max_players,format,organizer_id,prize,image_url,registrations(count)').eq('registrations.status', 'registered').in('status', GROUPS[tab]).order('start_at', { ascending: tab === 'avenir' }).limit(80)),
       q<any[]>(sb.from('registrations').select('competition_id').eq('user_id', me.id).in('status', ['registered', 'waitlist', 'eliminated', 'done'])),
     ])
     const names = await namesOf(rows.map((r) => r.organizer_id))
@@ -217,9 +217,9 @@ export function CompDetail({ id }: { id: string }) {
   const myNext = myMs.find((m: any) => !m.winner_id && m.player_a && m.player_b)
   const rounds = Math.max(0, ...ms.filter((m: any) => m.phase === 'elim' || m.phase === 'ko').map((m: any) => m.round_index + 1))
   const curRound = ms.filter((m: any) => (m.phase === 'elim' || m.phase === 'ko') && !m.winner_id && !m.bye).map((m: any) => m.round_index).sort()[0]
-  const act = async (fn: () => Promise<any>, ok: string) => {
+  const act = async (fn: () => Promise<any>, ok?: string) => {
     setBusy(true); setErr('')
-    try { await fn(); toast(ok); await reload() } catch (e: any) { setErr(errMsg(e)) }
+    try { await fn(); if (ok) toast(ok); await reload() } catch (e: any) { setErr(errMsg(e)) }
     setBusy(false)
   }
   const checkinOpen = ['open', 'closed'].includes(c.status) && Date.now() > new Date(c.start_at).getTime() - 3600e3
@@ -330,7 +330,10 @@ export function CompDetail({ id }: { id: string }) {
           <button className="btn gold" disabled={busy} onClick={() => act(() => rpc('check_in', { _comp: id }), 'Présence confirmée')}>Confirmer ma présence</button>
         )}
         {c.status === 'open' && !mine && c.organizer_id !== me.id && !data.staff && (
-          <button className="btn" disabled={busy} onClick={() => act(async () => { const r = await rpc('register_competition', { _comp: id }); if (r === 'waitlist') toast("Tu es sur la liste d'attente") }, 'Inscription enregistrée')}>S'inscrire</button>
+          <button className="btn" disabled={busy} onClick={() => act(async () => {
+            const r = await rpc('register_competition', { _comp: id })
+            toast(r === 'waitlist' ? "Tu es sur la liste d'attente" : 'Inscription enregistrée')
+          })}>S'inscrire</button>
         )}
         {mine && ['open', 'closed'].includes(c.status) && (
           <button className="btn ghost" style={{ background: 'var(--bg)' }} disabled={busy} onClick={() => act(() => rpc('withdraw_competition', { _comp: id }), 'Retrait enregistré')}>Inscrit ✓ · Se désinscrire</button>
