@@ -355,7 +355,7 @@ export const TEMPLATES: [string, string, Partial<{ format: string; max: number; 
 const FORMAT_HINT: Record<string, string> = {
   elim: 'Tu perds, tu sors. Le plus rapide : un seul match par tour.',
   rr: 'Tout le monde joue contre tout le monde. Le meilleur total de points gagne.',
-  poules: 'Des poules d’abord, puis un tableau à élimination directe pour les meilleurs.',
+  poules: 'Des poules d’abord, puis un tableau à élimination directe pour les meilleurs. Nécessite au moins 12 joueurs inscrits au tirage : en dessous, la compétition se joue automatiquement en Championnat.',
 }
 export const timeOptions = () => Array.from({ length: 48 }, (_, i) => String(Math.floor(i / 2)).padStart(2, '0') + ':' + (i % 2 ? '30' : '00'))
 export const toLocalDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -375,7 +375,7 @@ export function CompCreate() {
     const n = Number(f.max), gap = Number(f.gap)
     if (f.name.trim().length < 3) return setErr('Le nom doit faire 3 caractères minimum.')
     if (!(n >= 2 && n <= 128)) return setErr('Nombre de places : entre 2 et 128.')
-    if (!(gap >= 5 && gap <= 480)) return setErr('Écart entre deux tours : 5 à 480 minutes.')
+    if (!(gap >= 5 && gap <= 1440)) return setErr('Écart entre deux tours : 5 à 1440 minutes (24h max).')
     if (!f.date) return setErr('Choisis la date de début.')
     const start = new Date(f.date + 'T' + f.time + ':00')
     if (isNaN(start.getTime()) || start.getTime() < Date.now()) return setErr('Choisis une date de début dans le futur.')
