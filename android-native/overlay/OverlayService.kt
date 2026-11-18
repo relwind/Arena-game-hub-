@@ -518,6 +518,19 @@ class OverlayService : Service() {
     // ---------------------------------------------------------------- live (capture d'écran + signal serveur)
 
     private fun startLive() {
+        // Le service peut être relancé par le système (START_STICKY) sans les extras d'origine
+        // si tout le processus Arena a été tué entre-temps (mémoire faible, etc.) : dans ce cas
+        // la session n'est plus valide et il ne faut surtout pas tenter un live « fantôme ».
+        if (accessToken.isEmpty() || userId.isEmpty()) {
+            toast("Session Arena perdue. Rouvre l'application pour relancer le live.")
+            return
+        }
+        // Live de compétition : interdit tant que la salle n'est pas vraiment active, c'est-à-dire
+        // tant que l'hôte n'a pas envoyé le code. Pas de concept équivalent en match amical.
+        if (mode == "match" && roomCode == null) {
+            toast("La salle n'est pas encore active : attends que le code de la salle soit envoyé.")
+            return
+        }
         val resultCode = pendingProjectionResultCode
         val data = pendingProjectionData
         if (resultCode == null || data == null) {
