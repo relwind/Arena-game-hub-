@@ -218,11 +218,13 @@ class OverlayService : Service() {
         val view = inflater.inflate(R.layout.arena_menu, null)
         menuView = view
 
+        val liveBtn = view.findViewById<View>(R.id.arenaBtnLive)
         val liveIcon = view.findViewById<TextView>(R.id.arenaBtnLiveIcon)
         val liveLabel = view.findViewById<TextView>(R.id.arenaBtnLiveLabel)
-        updateLiveMenuLabel(liveIcon, liveLabel)
+        updateLiveMenuLabel(liveBtn, liveIcon, liveLabel)
 
-        view.findViewById<View>(R.id.arenaBtnLive).setOnClickListener {
+        liveBtn.setOnClickListener {
+            if (!isLive && !liveAllowed()) { toast(liveBlockedReason()); return@setOnClickListener }
             removeView(menuView); menuView = null
             if (isLive) stopLive() else startLive()
         }
@@ -266,8 +268,23 @@ class OverlayService : Service() {
         wm.addView(view, params)
     }
 
-    private fun updateLiveMenuLabel(icon: TextView, label: TextView) {
-        if (isLive) { icon.text = "⏹"; label.text = "Arrêter le live" } else { icon.text = "▶"; label.text = "Démarrer le live" }
+    /** Conditions de démarrage du live : session Arena valide, et salle active en compétition. */
+    private fun liveAllowed(): Boolean {
+        if (accessToken.isEmpty() || userId.isEmpty()) return false
+        if (mode == "match" && roomCode == null) return false
+        return true
+    }
+
+    private fun liveBlockedReason(): String =
+        if (accessToken.isEmpty() || userId.isEmpty()) "Session Arena perdue. Rouvre l'application pour relancer le live."
+        else "La salle n'est pas encore active : attends que le code de la salle soit envoyé."
+
+    private fun updateLiveMenuLabel(btn: View, icon: TextView, label: TextView) {
+        when {
+            isLive -> { icon.text = "⏹"; label.text = "Arrêter le live"; btn.alpha = 1f }
+            liveAllowed() -> { icon.text = "▶"; label.text = "Démarrer le live"; btn.alpha = 1f }
+            else -> { icon.text = "▶"; label.text = "Live indisponible pour l'instant"; btn.alpha = 0.4f }
+        }
     }
 
     private fun removeView(v: View?) {
@@ -518,19 +535,9 @@ class OverlayService : Service() {
     // ---------------------------------------------------------------- live (capture d'écran + signal serveur)
 
     private fun startLive() {
-        // Le service peut être relancé par le système (START_STICKY) sans les extras d'origine
-        // si tout le processus Arena a été tué entre-temps (mémoire faible, etc.) : dans ce cas
-        // la session n'est plus valide et il ne faut surtout pas tenter un live « fantôme ».
-        if (accessToken.isEmpty() || userId.isEmpty()) {
-            toast("Session Arena perdue. Rouvre l'application pour relancer le live.")
-            return
-        }
-        // Live de compétition : interdit tant que la salle n'est pas vraiment active, c'est-à-dire
-        // tant que l'hôte n'a pas envoyé le code. Pas de concept équivalent en match amical.
-        if (mode == "match" && roomCode == null) {
-            toast("La salle n'est pas encore active : attends que le code de la salle soit envoyé.")
-            return
-        }
+        // Session morte (processus Arena tué puis service relancé seul par START_STICKY) ou
+        // salle de compétition pas encore active (code non envoyé) : voir liveAllowed().
+        if (!liveAllowed()) { toast(liveBlockedReason()); return }
         val resultCode = pendingProjectionResultCode
         val data = pendingProjectionData
         if (resultCode == null || data == null) {
