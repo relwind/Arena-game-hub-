@@ -73,6 +73,9 @@ class ArenaOverlayPlugin : Plugin() {
         if (granted) {
             OverlayService.pendingProjectionResultCode = result!!.resultCode
             OverlayService.pendingProjectionData = result.data
+            // Nouveau jeton frais : la restriction « déjà utilisé » ne s'applique qu'à
+            // l'ancien, sinon un live resterait bloqué à vie après le tout premier.
+            OverlayService.projectionTokenUsed = false
         }
         val ret = JSObject(); ret.put("granted", granted); call.resolve(ret)
     }

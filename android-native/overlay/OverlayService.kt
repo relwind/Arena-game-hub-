@@ -64,6 +64,11 @@ class OverlayService : Service() {
         var pluginRef: ArenaOverlayPlugin? = null
         var pendingProjectionResultCode: Int? = null
         var pendingProjectionData: Intent? = null
+        // Un jeton de MediaProjection ne peut démarrer qu'UNE SEULE capture, pour toute sa
+        // durée de vie (pas seulement "une à la fois") : même arrêté puis relancé, un live qui
+        // réutilise le même jeton échoue avec "Cannot start already started MediaProjection".
+        // On le suit nous-mêmes car Android n'expose aucun moyen de l'interroger à l'avance.
+        @Volatile var projectionTokenUsed = false
 
         @Volatile var isRunning = false
         @Volatile var isLive = false
@@ -214,6 +219,7 @@ class OverlayService : Service() {
 
     private fun toggleMenu() {
         if (menuView != null) { removeView(menuView); menuView = null; return }
+        closeOtherPanels(keep = "menu")
         val inflater = LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.arena_menu, null)
         menuView = view
@@ -268,16 +274,21 @@ class OverlayService : Service() {
         wm.addView(view, params)
     }
 
-    /** Conditions de démarrage du live : session Arena valide, et salle active en compétition. */
+    /** Conditions de démarrage du live : session Arena valide, jeton de capture pas déjà
+     *  consommé, et salle active en compétition. */
     private fun liveAllowed(): Boolean {
         if (accessToken.isEmpty() || userId.isEmpty()) return false
+        if (pendingProjectionResultCode == null || pendingProjectionData == null || projectionTokenUsed) return false
         if (mode == "match" && roomCode == null) return false
         return true
     }
 
-    private fun liveBlockedReason(): String =
-        if (accessToken.isEmpty() || userId.isEmpty()) "Session Arena perdue. Rouvre l'application pour relancer le live."
-        else "La salle n'est pas encore active : attends que le code de la salle soit envoyé."
+    private fun liveBlockedReason(): String = when {
+        accessToken.isEmpty() || userId.isEmpty() -> "Session Arena perdue. Rouvre l'application pour relancer le live."
+        pendingProjectionResultCode == null || pendingProjectionData == null || projectionTokenUsed ->
+            "Autorisation de capture d'écran épuisée (déjà utilisée). Reviens sur Arena pour relancer le live."
+        else -> "La salle n'est pas encore active : attends que le code de la salle soit envoyé."
+    }
 
     private fun updateLiveMenuLabel(btn: View, icon: TextView, label: TextView) {
         when {
@@ -292,10 +303,22 @@ class OverlayService : Service() {
         try { wm.removeView(v) } catch (_: Exception) {}
     }
 
+    /** Ferme toute fenêtre de la bulle autre que celle qu'on est en train d'ouvrir : sans ça,
+     *  un changement d'état du match pendant qu'une fenêtre est ouverte (ex. la partie démarre
+     *  pendant que l'écran de salle est affiché) pouvait faire apparaître la fenêtre suivante
+     *  PAR-DESSUS l'ancienne au lieu de la remplacer — plusieurs popups empilées à l'écran. */
+    private fun closeOtherPanels(keep: String) {
+        if (keep != "menu" && menuView != null) { removeView(menuView); menuView = null }
+        if (keep != "status" && statusView != null) { removeView(statusView); statusView = null }
+        if (keep != "alert" && alertView != null) { removeView(alertView); alertView = null }
+        if (keep != "chat" && chatView != null) { stopChatPoll(); removeView(chatView); chatView = null }
+    }
+
     // ---------------------------------------------------------------- contacter l'organisateur (compétition uniquement)
 
     private fun toggleAlert() {
         if (alertView != null) { removeView(alertView); alertView = null; return }
+        closeOtherPanels(keep = "alert")
         val inflater = LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.arena_alert, null)
         alertView = view
@@ -348,6 +371,10 @@ class OverlayService : Service() {
 
     private fun stopMatchPoll() { matchPoll?.let { handler.removeCallbacks(it) }; matchPoll = null }
 
+    // Empêche de relancer renderStatus() (et donc de perturber la saisie en cours du code) à
+    // chaque sondage de 5s tant que rien n'a réellement changé côté serveur.
+    private var lastStatusSig: String? = null
+
     private fun refreshMatchState() {
         if (mode == "room") {
             if (roomId.isEmpty()) return
@@ -355,24 +382,44 @@ class OverlayService : Service() {
                 val row = rows?.optJSONObject(0)
                 roomCode = row?.optString("efootball_code")?.takeIf { it.isNotEmpty() && it != "null" }
                 hostId = row?.optString("host_id")?.takeIf { it.isNotEmpty() && it != "null" }
-                handler.post { statusView?.let { renderStatus(it) } }
+                handler.post { renderStatusIfChanged() }
             }
             return
         }
         if (matchId.isEmpty()) return
         BubbleHttp.selectRows(supabaseUrl, supabaseKey, accessToken, "matches?id=eq.$matchId&select=host_id,kicked_at") { rows ->
             val row = rows?.optJSONObject(0)
+            val wasKicked = kickedAt != null
             hostId = row?.optString("host_id")?.takeIf { it.isNotEmpty() && it != "null" }
             kickedAt = row?.optString("kicked_at")?.takeIf { it.isNotEmpty() && it != "null" }
             BubbleHttp.selectRows(supabaseUrl, supabaseKey, accessToken, "match_room?match_id=eq.$matchId&select=room_code") { rows2 ->
                 roomCode = rows2?.optJSONObject(0)?.optString("room_code")?.takeIf { it.isNotEmpty() }
-                handler.post { statusView?.let { renderStatus(it) } }
+                handler.post {
+                    // La partie vient de démarrer pendant que l'écran de salle était ouvert :
+                    // il devient obsolète (c'est le menu, pas cet écran, qu'il faut maintenant
+                    // utiliser) — on le referme au lieu de laisser le prochain tap en ouvrir
+                    // un second par-dessus.
+                    if (!wasKicked && kickedAt != null && statusView != null) {
+                        removeView(statusView); statusView = null
+                    } else {
+                        renderStatusIfChanged()
+                    }
+                }
             }
         }
     }
 
+    private fun renderStatusIfChanged() {
+        val sv = statusView ?: return
+        val sig = "$hostId|$roomCode|$kickedAt|$isLive"
+        if (sig == lastStatusSig) return
+        lastStatusSig = sig
+        renderStatus(sv)
+    }
+
     private fun toggleStatus() {
         if (statusView != null) { removeView(statusView); statusView = null; return }
+        closeOtherPanels(keep = "status")
         val inflater = LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.arena_status, null)
         statusView = view
@@ -430,6 +477,7 @@ class OverlayService : Service() {
         params.x = ((bp?.x ?: 0) - 270).coerceAtLeast(10)
         params.y = bp?.y ?: 200
         wm.addView(view, params)
+        lastStatusSig = "$hostId|$roomCode|$kickedAt|$isLive"
         renderStatus(view)
     }
 
@@ -546,6 +594,10 @@ class OverlayService : Service() {
         }
         val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         try {
+            // Un jeton de MediaProjection est à usage unique pour toute sa durée de vie : on le
+            // marque consommé ICI, avant même de savoir si la capture réussit, car Android ne
+            // permet de toute façon plus aucune nouvelle tentative avec ce même jeton ensuite.
+            projectionTokenUsed = true
             val projection = mgr.getMediaProjection(resultCode, data)
             mediaProjection = projection
             // Obligatoire depuis Android 14 : un callback doit être enregistré avant toute
@@ -665,6 +717,7 @@ class OverlayService : Service() {
 
     private fun toggleChat() {
         if (chatView != null) { stopChatPoll(); removeView(chatView); chatView = null; return }
+        closeOtherPanels(keep = "chat")
         val inflater = LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.arena_chat, null)
         chatView = view
