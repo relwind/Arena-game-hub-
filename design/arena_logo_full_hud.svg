@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="46%" r="60%">
+      <stop offset="0%" stop-color="#15224A"/>
+      <stop offset="55%" stop-color="#0E1630"/>
+      <stop offset="100%" stop-color="#070B16"/>
+    </radialGradient>
+    <linearGradient id="aGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#2F7BFF"/>
+      <stop offset="100%" stop-color="#35D0FF"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F5B83D"/>
+      <stop offset="100%" stop-color="#FFD873"/>
+    </linearGradient>
+    <filter id="glowBlue" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glowGold" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glowCyanSoft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+  </defs>
+
+  <!-- fond -->
+  <rect width="512" height="512" fill="url(#bgGlow)"/>
+
+  <!-- halo central doux derrière le logo -->
+  <circle cx="256" cy="268" r="150" fill="#35D0FF" opacity="0.10"/>
+
+  <!-- anneau HUD hexagonal -->
+  <g opacity="0.65" filter="url(#glowCyanSoft)">
+    <polygon points="256,42 420,136 420,324 256,418 92,324 92,136"
+             fill="none" stroke="#35D0FF" stroke-width="4.5" stroke-dasharray="26 14"/>
+  </g>
+  <!-- repères (ticks) aux sommets de l'hexagone, façon viseur -->
+  <g stroke="#F5B83D" stroke-width="5" stroke-linecap="round" opacity="0.9" filter="url(#glowGold)">
+    <line x1="256" y1="42" x2="256" y2="20"/>
+    <line x1="420" y1="136" x2="440" y2="124"/>
+    <line x1="420" y1="324" x2="440" y2="336"/>
+    <line x1="256" y1="418" x2="256" y2="440"/>
+    <line x1="92" y1="324" x2="72" y2="336"/>
+    <line x1="92" y1="136" x2="72" y2="124"/>
+  </g>
+
+  <!-- petits points de circuit, discrets -->
+  <g fill="#35D0FF" opacity="0.55">
+    <circle cx="150" cy="420" r="4.5"/>
+    <circle cx="362" cy="420" r="4.5"/>
+    <circle cx="150" cy="420" r="9" fill="none" stroke="#35D0FF" stroke-width="1.6" opacity="0.5"/>
+    <circle cx="362" cy="420" r="9" fill="none" stroke="#35D0FF" stroke-width="1.6" opacity="0.5"/>
+  </g>
+  <g stroke="#35D0FF" stroke-width="2" opacity="0.4">
+    <line x1="150" y1="411" x2="150" y2="398"/>
+    <line x1="362" y1="411" x2="362" y2="398"/>
+  </g>
+
+  <!-- lettre A : un seul tracé pied-gauche -> sommet -> pied-droit, avec glow -->
+  <path d="M110,392 L256,108 L402,392" fill="none" stroke="url(#aGrad)"
+        stroke-width="46" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowBlue)"/>
+
+  <!-- barre centrale dorée -->
+  <rect x="160" y="312" width="192" height="36" rx="18" fill="url(#goldGrad)" filter="url(#glowGold)"/>
+</svg>

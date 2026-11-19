@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="46%" r="60%">
+      <stop offset="0%" stop-color="#15224A"/>
+      <stop offset="55%" stop-color="#0E1630"/>
+      <stop offset="100%" stop-color="#070B16"/>
+    </radialGradient>
+    <linearGradient id="aGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#2F7BFF"/>
+      <stop offset="100%" stop-color="#35D0FF"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F5B83D"/>
+      <stop offset="100%" stop-color="#FFD873"/>
+    </linearGradient>
+    <filter id="glowBlue" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowGold" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="circleMask">
+      <circle cx="256" cy="256" r="256"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#circleMask)">
+    <rect width="512" height="512" fill="url(#bgGlow)"/>
+    <circle cx="256" cy="268" r="150" fill="#35D0FF" opacity="0.10"/>
+    <path d="M110,392 L256,108 L402,392" fill="none" stroke="url(#aGrad)"
+          stroke-width="46" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowBlue)"/>
+    <rect x="160" y="312" width="192" height="36" rx="18" fill="url(#goldGrad)" filter="url(#glowGold)"/>
+  </g>
+</svg>

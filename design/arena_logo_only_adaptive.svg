@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <defs>
+    <linearGradient id="aGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#2F7BFF"/>
+      <stop offset="100%" stop-color="#35D0FF"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F5B83D"/>
+      <stop offset="100%" stop-color="#FFD873"/>
+    </linearGradient>
+    <filter id="glowBlue" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowGold" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Logo seul (pas d'anneau hexagonal, pas de fond) : réservé à l'icône adaptative Android.
+       Échelle réduite (0.13) et recentrée pour rester dans la zone de sécurité (cercle visible
+       d'environ 66dp sur un canevas de 108dp) quel que soit le masque (cercle, carré arrondi…). -->
+  <g transform="translate(54,54) scale(0.13) translate(-256,-250)">
+    <path d="M110,392 L256,108 L402,392" fill="none" stroke="url(#aGrad)"
+          stroke-width="46" stroke-linecap="round" stroke-linejoin="round" filter="url(#glowBlue)"/>
+    <rect x="160" y="312" width="192" height="36" rx="18" fill="url(#goldGrad)" filter="url(#glowGold)"/>
+  </g>
+</svg>
