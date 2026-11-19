@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
+import React, { createContext, useContext, useEffect, useId, useRef, useState } from 'react'
 import { sb } from './supabase'
 
 export type Route = { name: string; p?: any }
@@ -102,11 +102,45 @@ export function Top({ title, back = true, right }: { title: string; back?: boole
 export const Spin = ({ text = 'Chargement…' }: { text?: string }) => <div className="spin">{text}</div>
 export const ErrBox = ({ text }: { text: string }) => (text ? <div className="err">{text}</div> : null)
 
-export function Logo({ size = 92 }: { size?: number }) {
+export function Logo({ size = 92, glow = true }: { size?: number; glow?: boolean }) {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   return (
-    <svg viewBox="0 0 100 90" width={size} height={size * 0.91} aria-hidden="true" style={{ margin: '0 auto', display: 'block' }}>
-      <path d="M50 4 94 84H72L50 40 28 84H6Z" fill="none" stroke="#35D0FF" strokeWidth="7" strokeLinejoin="round" />
-      <path d="M36 66h28" stroke="#2F7BFF" strokeWidth="7" strokeLinecap="round" />
+    <svg viewBox="0 0 100 90" width={size} height={size * 0.91} aria-hidden="true"
+      className={glow ? 'logo-svg' : undefined} style={{ margin: '0 auto', display: 'block', overflow: 'visible' }}>
+      <defs>
+        <linearGradient id={`la${uid}`} x1="0%" y1="100%" x2="0%" y2="0%">
+          <stop offset="0%" stopColor="#2F7BFF" />
+          <stop offset="100%" stopColor="#35D0FF" />
+        </linearGradient>
+        {/* userSpaceOnUse : le tracé de la barre est une ligne de hauteur nulle (M36 66h28),
+            et un dégradé en unités par défaut (objectBoundingBox) sur une bbox dégénérée ne
+            s'affiche pas du tout — d'où des coordonnées explicites ici. */}
+        <linearGradient id={`lg${uid}`} gradientUnits="userSpaceOnUse" x1="36" y1="66" x2="64" y2="66">
+          <stop offset="0%" stopColor="#F5B83D" />
+          <stop offset="100%" stopColor="#FFD873" />
+        </linearGradient>
+      </defs>
+      <path d="M50 4 94 84H72L50 40 28 84H6Z" fill={`url(#la${uid})`} />
+      <path d="M36 66h28" stroke={`url(#lg${uid})`} strokeWidth="7" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** Anneau HUD hexagonal décoratif (repères façon viseur), utilisé derrière le logo sur l'écran
+ *  de démarrage et autres grands formats — trop fin pour l'icône de l'app, réservé au "grand". */
+export function HudRing({ size = 220 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 512 512" width={size} height={size} aria-hidden="true" className="hud-ring">
+      <polygon points="256,42 420,136 420,324 256,418 92,324 92,136"
+        fill="none" stroke="#35D0FF" strokeWidth="4.5" strokeDasharray="26 14" opacity={0.55} />
+      <g stroke="#F5B83D" strokeWidth="5" strokeLinecap="round" opacity={0.85}>
+        <line x1="256" y1="42" x2="256" y2="20" />
+        <line x1="420" y1="136" x2="440" y2="124" />
+        <line x1="420" y1="324" x2="440" y2="336" />
+        <line x1="256" y1="418" x2="256" y2="440" />
+        <line x1="92" y1="324" x2="72" y2="336" />
+        <line x1="92" y1="136" x2="72" y2="124" />
+      </g>
     </svg>
   )
 }

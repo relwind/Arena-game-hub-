@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import { sb } from '../lib/supabase'
 import { AvatarPicker } from '../lib/img'
-import { Logo, Top, ErrBox, errMsg, useApp, age, rpc, Av } from '../lib/ui'
+import { Logo, HudRing, Top, ErrBox, errMsg, useApp, age, rpc, Av } from '../lib/ui'
 
 export function Splash() {
   const { nav } = useApp()
   return (
     <section className="screen">
-      <div className="splash">
-        <Logo />
+      <div className="splash splash-futuristic">
+        <div className="splash-grid" aria-hidden="true" />
+        <div className="splash-scan" aria-hidden="true" />
+        <div className="splash-logo-wrap">
+          <HudRing size={230} />
+          <Logo size={108} />
+        </div>
         <div className="logo">ARENA<small>GAME HUB</small></div>
         <p className="muted" style={{ margin: 0 }}>Joue. Affronte. Compétis.</p>
         <button className="btn" onClick={() => nav.go('login')}>Commencer</button>
