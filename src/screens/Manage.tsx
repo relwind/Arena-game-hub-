@@ -9,10 +9,17 @@ const ck = (r: any) => { if (r.error) throw new Error(errMsg(r.error)) }
 export function OrganizerHome() {
   const { me, nav, toast } = useApp()
   const { data, loading, reload } = useLoad(async () => {
-    const [mine, inv] = await Promise.all([
-      q<any[]>(sb.from('competitions').select('id,name,status,start_at,max_players,registrations(count)').eq('organizer_id', me.id).order('created_at', { ascending: false }).limit(30)),
+    const cols = 'id,name,status,start_at,max_players,registrations(count)'
+    // Les compétitions actives (open/closed/ongoing) ne doivent jamais être poussées hors de
+    // la liste par de vieilles compétitions terminées ou annulées : récupérées sans limite à
+    // part, puis l'historique (finished/cancelled) ne vient combler que les places restantes
+    // jusqu'à 30 au total, au lieu d'un seul tri par date de création qui mélangeait tout.
+    const [active, archive, inv] = await Promise.all([
+      q<any[]>(sb.from('competitions').select(cols).eq('organizer_id', me.id).in('status', ['open', 'closed', 'ongoing']).order('created_at', { ascending: false })),
+      q<any[]>(sb.from('competitions').select(cols).eq('organizer_id', me.id).in('status', ['finished', 'cancelled']).order('created_at', { ascending: false }).limit(30)),
       q<any[]>(sb.from('competition_staff').select('competition_id,invited_by,competitions(name)').eq('user_id', me.id).eq('status', 'pending')),
     ])
+    const mine = [...active, ...archive].slice(0, 30)
     const ids = mine.filter((c) => ['open', 'closed', 'ongoing'].includes(c.status)).map((c) => c.id)
     const ms = ids.length ? await q<any[]>(sb.from('matches').select('id,competition_id').in('competition_id', ids)) : []
     const mids = ms.map((m) => m.id)
