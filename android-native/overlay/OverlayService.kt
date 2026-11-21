@@ -845,6 +845,17 @@ class OverlayService : Service() {
         stopSelf()
     }
 
+    /** Appelé quand la tâche Arena est retirée des applications récentes (balayée pour la
+     *  fermer complètement) — à distinguer de passer simplement en arrière-plan pour jouer à
+     *  eFootball, ce qui ne retire pas la tâche et ne déclenche donc pas ceci : la bulle doit
+     *  continuer dans ce cas. Mais si la personne ferme vraiment Arena, tout doit s'arrêter
+     *  avec elle (salle, live, chat) plutôt que de laisser le service tourner indéfiniment
+     *  tout seul en arrière-plan. */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        stopEverything()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         stopEverything()
         super.onDestroy()
